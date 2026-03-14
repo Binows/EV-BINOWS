@@ -260,15 +260,42 @@ function calcEV(prob, odd) {
   return parseFloat(((prob * odd - 1) * 100).toFixed(1));
 }
 
-function calcKelly(prob, odd) {
+function calcKelly(prob, odd, last5, lineNum) {
   if (odd <= 1) return 0;
-  return parseFloat((Math.max(0, (prob * odd - 1) / (odd - 1)) * 50).toFixed(1)); // meio Kelly
+  // Meio Kelly base
+  let kelly = Math.max(0, (prob * odd - 1) / (odd - 1)) * 50;
+  // Hit rate nos últimos 5 como fator de confiança
+  if (last5 && last5.length > 0 && lineNum) {
+    const hits = last5.filter(x => x >= lineNum).length;
+    const hitRate = hits / last5.length;
+    // Penaliza se hit rate < 40% (menos de 2/5)
+    if (hitRate < 0.4) kelly *= hitRate / 0.4;
+  }
+  // Teto de 2.5% da banca por aposta
+  return parseFloat(Math.min(kelly, 2.5).toFixed(1));
+}
+
+// Detecta mercado pelo conteúdo das linhas quando nome do arquivo não ajuda
+function detectMarketByContent(players) {
+  if (!players || players.length === 0) return 'desconhecido';
+  // Pega o maior valor de linha de todos os jogadores
+  let maxLine = 0;
+  for (const p of players) {
+    for (const label of Object.keys(p.lines || {})) {
+      const n = parseInt(label);
+      if (!isNaN(n) && n > maxLine) maxLine = n;
+    }
+  }
+  // Assistências: raramente > 15; Rebotes: raramente > 25; Pontos: chegam a 40+
+  if (maxLine <= 15) return 'assistências';
+  if (maxLine <= 25) return 'rebotes';
+  return 'pontos';
 }
 
 // ─────────────────────────────────────────────
 // MANUAL MODE — FILE HANDLING
 // ─────────────────────────────────────────────
-const MKT_NAMES = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', desconhecido: '?' };
+const MKT_NAMES  = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', desconhecido: '?' };
 const MKT_FILTER = { reb: 'rebotes', pts: 'pontos', ast: 'assistências' };
 
 function handleDrop(e) {
@@ -297,6 +324,7 @@ function handleFiles(files) {
             if (fn.includes('reb') || fn.includes('rebote'))       data.market = 'rebotes';
             else if (fn.includes('ast') || fn.includes('assist'))   data.market = 'assistências';
             else if (fn.includes('pts') || fn.includes('pont'))     data.market = 'pontos';
+            else data.market = detectMarketByContent(data.players);
           }
           allDatasets.push(data);
         }
@@ -413,7 +441,7 @@ function renderManual() {
       if (lambda !== null) {
         prob  = poissonCDF(lambda, k);
         ev    = calcEV(prob, odd);
-        kelly = calcKelly(prob, odd);
+        kelly = calcKelly(prob, odd, last5, parseInt(label));
       }
       totalLines++;
       if (ev > 3) {
@@ -531,7 +559,7 @@ function getFairProb(oddsArr) {
   return parseFloat((oddsArr.map(o => (1/o)/total*100).reduce((s,p)=>s+p,0)/oddsArr.length).toFixed(1));
 }
 function livEV(p, o)     { return parseFloat(((p/100*o-1)*100).toFixed(1)); }
-function livKelly(p, o)  { return parseFloat((Math.max(0,(p/100*o-1)/(o-1)*100/2)).toFixed(1)); }
+function livKelly(p, o)  { return parseFloat((Math.min(Math.max(0,(p/100*o-1)/(o-1)*100/2), 2.5)).toFixed(1)); }
 
 async function loadLiveData() {
   const btn = document.getElementById('refresh-btn');
