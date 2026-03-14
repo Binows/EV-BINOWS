@@ -57,13 +57,8 @@
 </style>
 </head>
 <body>
-
 <div class="topbar">
-  <div class="logo">
-    <div class="logo-dot"></div>
-    EV+ NBA Scanner
-    <span class="live-badge">AO VIVO</span>
-  </div>
+  <div class="logo"><div class="logo-dot"></div>EV+ NBA Scanner<span class="live-badge">AO VIVO</span></div>
   <div class="filters">
     <button class="filter-btn active" onclick="setFilter('todos',this)">Todos</button>
     <button class="filter-btn" onclick="setFilter('pos',this)">Só EV+</button>
@@ -71,7 +66,6 @@
     <button class="filter-btn" onclick="setFilter('jogo',this)">Resultado jogo</button>
   </div>
 </div>
-
 <div class="container">
   <div class="metrics">
     <div class="metric"><div class="metric-label">EV+ hoje</div><div class="metric-val green" id="cnt-pos">—</div></div>
@@ -82,88 +76,92 @@
   <div class="section-title">apostas de hoje — NBA</div>
   <div id="bet-list"><div class="loading"><span class="spinner"></span>Buscando jogos de hoje...</div></div>
   <div class="footer">
-    <span class="footer-txt">fonte: BallDontLie API (stats) + odds estimadas • by Binows</span>
+    <span class="footer-txt">fonte: BallDontLie API + odds estimadas • by Binows</span>
     <button class="refresh-btn" id="refresh-btn" onclick="loadData()">Atualizar dados</button>
   </div>
 </div>
-
 <script>
-const API_BASE = 'https://www.balldontlie.io/api/v1';
+const API_KEY = '2d532385-df63-46eb-ae01-492f66e79d16';
+const HEADERS = { 'Authorization': API_KEY };
+const API_BASE = 'https://api.balldontlie.io/v1';
 const ODDS = {
-  'LeBron James':              { pontos: {linha:24.5,odd:1.90}, assistencias: {linha:6.5,odd:1.85} },
-  'Nikola Jokic':              { rebotes: {linha:11.5,odd:1.88}, assistencias: {linha:8.5,odd:1.92}, pontos: {linha:27.5,odd:1.87} },
-  'Stephen Curry':             { pontos: {linha:26.5,odd:1.91}, assistencias: {linha:5.5,odd:1.88} },
-  'Giannis Antetokounmpo':     { pontos: {linha:29.5,odd:1.89}, rebotes: {linha:10.5,odd:1.86} },
-  'Luka Doncic':               { pontos: {linha:30.5,odd:1.87}, assistencias: {linha:8.5,odd:1.90}, rebotes: {linha:8.5,odd:1.93} },
-  'Jayson Tatum':              { pontos: {linha:26.5,odd:1.88}, rebotes: {linha:7.5,odd:1.91} },
-  'Shai Gilgeous-Alexander':   { pontos: {linha:30.5,odd:1.86}, assistencias: {linha:5.5,odd:1.90} },
-  'Anthony Davis':             { pontos: {linha:25.5,odd:1.89}, rebotes: {linha:11.5,odd:1.87} },
+  'LeBron James':            { pontos:{linha:24.5,odd:1.90}, assistencias:{linha:6.5,odd:1.85} },
+  'Nikola Jokic':            { rebotes:{linha:11.5,odd:1.88}, assistencias:{linha:8.5,odd:1.92}, pontos:{linha:27.5,odd:1.87} },
+  'Stephen Curry':           { pontos:{linha:26.5,odd:1.91}, assistencias:{linha:5.5,odd:1.88} },
+  'Giannis Antetokounmpo':   { pontos:{linha:29.5,odd:1.89}, rebotes:{linha:10.5,odd:1.86} },
+  'Luka Doncic':             { pontos:{linha:30.5,odd:1.87}, assistencias:{linha:8.5,odd:1.90}, rebotes:{linha:8.5,odd:1.93} },
+  'Jayson Tatum':            { pontos:{linha:26.5,odd:1.88}, rebotes:{linha:7.5,odd:1.91} },
+  'Shai Gilgeous-Alexander': { pontos:{linha:30.5,odd:1.86}, assistencias:{linha:5.5,odd:1.90} },
+  'Anthony Davis':           { pontos:{linha:25.5,odd:1.89}, rebotes:{linha:11.5,odd:1.87} },
 };
 const PLAYERS = [
-  {id:237, name:'LeBron James', team:'LAL'},
-  {id:279, name:'Nikola Jokic', team:'DEN'},
-  {id:115, name:'Stephen Curry', team:'GSW'},
-  {id:192, name:'Giannis Antetokounmpo', team:'MIL'},
-  {id:140, name:'Luka Doncic', team:'DAL'},
-  {id:434, name:'Jayson Tatum', team:'BOS'},
+  {id:237,  name:'LeBron James',            team:'LAL'},
+  {id:279,  name:'Nikola Jokic',            team:'DEN'},
+  {id:115,  name:'Stephen Curry',           team:'GSW'},
+  {id:192,  name:'Giannis Antetokounmpo',   team:'MIL'},
+  {id:140,  name:'Luka Doncic',             team:'DAL'},
+  {id:434,  name:'Jayson Tatum',            team:'BOS'},
   {id:3547359, name:'Shai Gilgeous-Alexander', team:'OKC'},
-  {id:144, name:'Anthony Davis', team:'LAL'},
+  {id:144,  name:'Anthony Davis',           team:'LAL'},
 ];
 const STAT_MAP = {pontos:'pts', rebotes:'reb', assistencias:'ast'};
-let allBets = [], activeFilter = 'todos';
+let allBets=[], activeFilter='todos';
 
 function calcEV(p,o){ return parseFloat(((p/100*o-1)*100).toFixed(1)); }
 function calcKelly(p,o){ return parseFloat((Math.max(0,(p/100*o-1)/(o-1)*100)).toFixed(1)); }
 function calcProb(media,linha){
-  const r = media/linha;
-  if(r>=1.15) return 70; if(r>=1.08) return 62; if(r>=1.02) return 55;
-  if(r>=0.97) return 48; if(r>=0.90) return 38; return 30;
+  const r=media/linha;
+  if(r>=1.15)return 70; if(r>=1.08)return 62; if(r>=1.02)return 55;
+  if(r>=0.97)return 48; if(r>=0.90)return 38; return 30;
+}
+
+async function apiFetch(url){
+  const r = await fetch(url, {headers: HEADERS});
+  return r.json();
 }
 
 async function loadData(){
-  const btn = document.getElementById('refresh-btn');
+  const btn=document.getElementById('refresh-btn');
   btn.textContent='Atualizando...'; btn.disabled=true;
   document.getElementById('bet-list').innerHTML='<div class="loading"><span class="spinner"></span>Buscando dados da NBA...</div>';
   try {
-    const today = new Date();
-    const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    const gr = await fetch(`${API_BASE}/games?dates[]=${dateStr}&per_page=30`);
-    const gd = await gr.json();
+    const today=new Date();
+    const dateStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const gd = await apiFetch(`${API_BASE}/games?dates[]=${dateStr}&per_page=30`);
     const games = gd.data || [];
     document.getElementById('cnt-games').textContent = games.length || '0';
-    const teamsHoje = new Set();
+    const teamsHoje=new Set();
     games.forEach(g=>{ teamsHoje.add(g.home_team.abbreviation); teamsHoje.add(g.visitor_team.abbreviation); });
-    const bets = [];
+    const bets=[];
     for(const p of PLAYERS){
       if(teamsHoje.size>0 && !teamsHoje.has(p.team)) continue;
-      const sr = await fetch(`${API_BASE}/season_averages?season=2024&player_ids[]=${p.id}`);
-      const sd = await sr.json();
-      if(!sd.data || !sd.data[0]) continue;
-      const stats = sd.data[0];
-      const odds = ODDS[p.name]; if(!odds) continue;
+      const sd = await apiFetch(`${API_BASE}/season_averages?season=2024&player_ids[]=${p.id}`);
+      if(!sd.data||!sd.data[0]) continue;
+      const stats=sd.data[0];
+      const odds=ODDS[p.name]; if(!odds) continue;
       for(const [mercado,info] of Object.entries(odds)){
-        const media = parseFloat(stats[STAT_MAP[mercado]]||0);
+        const media=parseFloat(stats[STAT_MAP[mercado]]||0);
         if(media<=0) continue;
-        const prob = calcProb(media,info.linha);
-        const ev = calcEV(prob,info.odd);
-        const kelly = calcKelly(prob,info.odd);
-        const game = games.find(g=>g.home_team.abbreviation===p.team||g.visitor_team.abbreviation===p.team);
-        const gameStr = game ? `${game.visitor_team.abbreviation} @ ${game.home_team.abbreviation}` : `${p.team} — hoje`;
-        bets.push({player:p.name, market:`${info.linha}+ ${mercado}`, game:gameStr, type:'player', myProb:prob, odd:info.odd, kelly, media:`${media.toFixed(1)} ${STAT_MAP[mercado]}/jogo`, ev});
+        const prob=calcProb(media,info.linha);
+        const ev=calcEV(prob,info.odd);
+        const kelly=calcKelly(prob,info.odd);
+        const game=games.find(g=>g.home_team.abbreviation===p.team||g.visitor_team.abbreviation===p.team);
+        const gameStr=game?`${game.visitor_team.abbreviation} @ ${game.home_team.abbreviation}`:`${p.team} — hoje`;
+        bets.push({player:p.name,market:`${info.linha}+ ${mercado}`,game:gameStr,type:'player',myProb:prob,odd:info.odd,kelly,media:`${media.toFixed(1)} ${STAT_MAP[mercado]}/jogo`,ev});
       }
     }
     games.slice(0,3).forEach(g=>{
       const odd=parseFloat((1.60+Math.random()*0.4).toFixed(2));
       const prob=Math.round(52+Math.random()*15);
-      bets.push({player:g.home_team.abbreviation, market:'vitória', game:`${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`, type:'jogo', myProb:prob, odd, kelly:calcKelly(prob,odd), media:`${prob}% win rate estimado`, ev:calcEV(prob,odd)});
+      bets.push({player:g.home_team.abbreviation,market:'vitória',game:`${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`,type:'jogo',myProb:prob,odd,kelly:calcKelly(prob,odd),media:`${prob}% win rate estimado`,ev:calcEV(prob,odd)});
     });
-    allBets = bets.sort((a,b)=>b.ev-a.ev);
-    const pos = allBets.filter(b=>b.ev>2);
-    document.getElementById('cnt-pos').textContent = pos.length;
-    const best = pos.length>0 ? Math.max(...pos.map(b=>b.ev)) : 0;
-    document.getElementById('best-ev').textContent = best>0 ? `+${best.toFixed(1)}%` : '—';
-    const now = new Date();
-    document.getElementById('last-update').textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    allBets=bets.sort((a,b)=>b.ev-a.ev);
+    const pos=allBets.filter(b=>b.ev>2);
+    document.getElementById('cnt-pos').textContent=pos.length;
+    const best=pos.length>0?Math.max(...pos.map(b=>b.ev)):0;
+    document.getElementById('best-ev').textContent=best>0?`+${best.toFixed(1)}%`:'—';
+    const now=new Date();
+    document.getElementById('last-update').textContent=`${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
     render();
   } catch(e){
     document.getElementById('bet-list').innerHTML='<div class="empty">Erro ao buscar dados. Tente novamente.</div>';
@@ -178,33 +176,17 @@ function setFilter(f,el){
 }
 
 function render(){
-  let data = allBets;
+  let data=allBets;
   if(activeFilter==='pos') data=allBets.filter(b=>b.ev>2);
   if(activeFilter==='player') data=allBets.filter(b=>b.type==='player');
   if(activeFilter==='jogo') data=allBets.filter(b=>b.type==='jogo');
-  if(data.length===0){ document.getElementById('bet-list').innerHTML='<div class="empty">Nenhuma aposta encontrada.</div>'; return; }
+  if(data.length===0){document.getElementById('bet-list').innerHTML='<div class="empty">Nenhuma aposta encontrada.</div>';return;}
   document.getElementById('bet-list').innerHTML=data.map(b=>{
     let cc,sig,bc,bt;
     if(b.ev>2){cc='ev-plus';sig='🟢';bc='pos';bt=`+${b.ev}%`;}
     else if(b.ev<-2){cc='ev-minus';sig='🔴';bc='neg';bt=`${b.ev}%`;}
     else{cc='neutral';sig='⬜';bc='neu';bt='neutro';}
-    return `<div class="bet-card ${cc}">
-      <div class="bet-left">
-        <div class="bet-header"><span class="bet-player">${b.player}</span><span class="bet-market">${b.market}</span></div>
-        <div class="bet-game">${b.game}</div>
-        <div class="bet-stats">
-          <div class="stat"><span class="stat-label">minha prob.</span><span class="stat-val">${b.myProb}%</span></div>
-          <div class="stat"><span class="stat-label">prob. casa</span><span class="stat-val">${Math.round(100/b.odd)}%</span></div>
-          <div class="stat"><span class="stat-label">média temp.</span><span class="stat-val">${b.media}</span></div>
-        </div>
-      </div>
-      <div class="bet-right">
-        <span class="signal">${sig}</span>
-        <span class="ev-badge ${bc}">EV ${bt}</span>
-        <span class="odd-val">odd ${b.odd.toFixed(2)}</span>
-        ${b.kelly>0?`<span class="kelly">Kelly: ${b.kelly}% banca</span>`:''}
-      </div>
-    </div>`;
+    return `<div class="bet-card ${cc}"><div class="bet-left"><div class="bet-header"><span class="bet-player">${b.player}</span><span class="bet-market">${b.market}</span></div><div class="bet-game">${b.game}</div><div class="bet-stats"><div class="stat"><span class="stat-label">minha prob.</span><span class="stat-val">${b.myProb}%</span></div><div class="stat"><span class="stat-label">prob. casa</span><span class="stat-val">${Math.round(100/b.odd)}%</span></div><div class="stat"><span class="stat-label">média temp.</span><span class="stat-val">${b.media}</span></div></div></div><div class="bet-right"><span class="signal">${sig}</span><span class="ev-badge ${bc}">EV ${bt}</span><span class="odd-val">odd ${b.odd.toFixed(2)}</span>${b.kelly>0?`<span class="kelly">Kelly: ${b.kelly}% banca</span>`:''}</div></div>`;
   }).join('');
 }
 loadData();
