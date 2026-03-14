@@ -461,26 +461,34 @@ function calcKellyFromSeason(prob, odd, seasonHR) {
   return parseFloat(kelly.toFixed(2));
 }
 
-// Busca game logs de todos os jogadores em paralelo e atualiza os cards
+// Busca game logs de todos os jogadores e atualiza os cards
 async function loadSeasonStats(players) {
   const statusEl = document.getElementById('nba-status');
   if (statusEl) { statusEl.textContent = '⏳ Buscando stats da temporada...'; statusEl.style.display = 'block'; }
 
-  const unique = [...new Map(players.map(p => [p.player, p])).values()];
+  const unique = [...new Map(players.map(p => [p.player + '|' + p.market, p])).values()];
   let done = 0;
 
-  await Promise.all(unique.map(async (p) => {
+  // Busca em paralelo mas aguarda TODOS terminarem antes de atualizar o ranking
+  const results = await Promise.all(unique.map(async (p) => {
     const logs = await fetchNBAGameLogs(p.player);
     done++;
-    if (statusEl) statusEl.textContent = `⏳ Stats da temporada: ${done}/${unique.length} jogadores...`;
-    if (!logs) return;
-    // Atualiza todos os cards desse jogador no DOM
-    updatePlayerCards(p.player, p.market, logs);
+    if (statusEl) statusEl.textContent = `⏳ Stats da temporada: ${done}/${unique.length}...`;
+    return { player: p.player, market: p.market, logs };
   }));
 
-  if (statusEl) { statusEl.textContent = '✓ Stats da temporada carregados'; setTimeout(() => statusEl.style.display = 'none', 3000); }
-  // Re-renderiza o ranking com dados atualizados
+  // Atualiza todos os cards de uma vez
+  for (const { player, market, logs } of results) {
+    if (logs) updatePlayerCards(player, market, logs);
+  }
+
+  // Só agora reconstrói o ranking com valores atualizados
   renderTopEVFromDOM();
+
+  if (statusEl) {
+    statusEl.textContent = '✓ Stats da temporada carregados';
+    setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+  }
 }
 
 function updatePlayerCards(playerName, market, logs) {
