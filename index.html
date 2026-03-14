@@ -388,16 +388,15 @@ function clearData() {
 // ─────────────────────────────────────────────
 // NBA STATS API — GAME LOGS DA TEMPORADA
 // ─────────────────────────────────────────────
-const NBA_CACHE   = {};   // playerName → { logs: [...], ts: Date }
-const NBA_ID_CACHE = {};  // playerName → playerId
-const SEASON = '2024-25';
-const PROXY  = 'https://api.allorigins.win/raw?url=';
+const NBA_CACHE    = {};
+const NBA_ID_CACHE = {};
+const SEASON       = '2024-25';
+const WORKER       = 'https://round-rain-9e80.vinipaio.workers.dev';
 
 async function fetchNBAPlayerID(name) {
   if (NBA_ID_CACHE[name]) return NBA_ID_CACHE[name];
   try {
-    const url = `https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=1`;
-    const res  = await fetch(PROXY + encodeURIComponent(url));
+    const res  = await fetch(`${WORKER}/nba/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=1`);
     const data = await res.json();
     const rows = data.resultSets[0].rowSet;
     const hdrs = data.resultSets[0].headers;
@@ -424,8 +423,7 @@ async function fetchNBAGameLogs(playerName) {
   try {
     const playerId = await fetchNBAPlayerID(playerName);
     if (!playerId) return null;
-    const url = `https://stats.nba.com/stats/playergamelogs?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular+Season`;
-    const res  = await fetch(PROXY + encodeURIComponent(url));
+    const res  = await fetch(`${WORKER}/nba/playergamelogs?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular+Season`);
     const data = await res.json();
     const rows = data.resultSets[0].rowSet;
     const hdrs = data.resultSets[0].headers;
@@ -714,8 +712,7 @@ function renderTopEV(topList) {
 // ─────────────────────────────────────────────
 // LIVE MODE (Odds API — mantido do original)
 // ─────────────────────────────────────────────
-const KEY     = 'a66ec6d8e3911951e9c061e0243445db';
-const BASE    = 'https://api.the-odds-api.com/v4';
+const BASE    = WORKER + '/odds';
 const SPORT   = 'basketball_nba';
 const MARKETS = 'player_points,player_rebounds,player_assists';
 const BOOKS   = 'pinnacle,draftkings,fanduel';
@@ -738,7 +735,7 @@ async function loadLiveData() {
   document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando jogos...</div>';
 
   try {
-    const evRes = await fetch(BASE + '/sports/' + SPORT + '/events?apiKey=' + KEY);
+    const evRes = await fetch(BASE + '/sports/' + SPORT + '/events');
     if (!evRes.ok) throw new Error('Erro ' + evRes.status);
     const events = await evRes.json();
     if (!Array.isArray(events) || events.length === 0) {
@@ -754,7 +751,7 @@ async function loadLiveData() {
     const bets = [];
     for (const ev of jogos) {
       document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>' + ev.away_team + ' @ ' + ev.home_team + '...</div>';
-      const pRes = await fetch(BASE + '/sports/' + SPORT + '/events/' + ev.id + '/odds?apiKey=' + KEY + '&regions=us&markets=' + MARKETS + '&bookmakers=' + BOOKS + '&oddsFormat=american');
+      const pRes = await fetch(BASE + '/sports/' + SPORT + '/events/' + ev.id + '/odds?regions=us&markets=' + MARKETS + '&bookmakers=' + BOOKS + '&oddsFormat=american');
       if (!pRes.ok) continue;
       const rem = pRes.headers.get('x-requests-remaining');
       if (rem) document.getElementById('req-info').textContent = rem + ' req restantes';
