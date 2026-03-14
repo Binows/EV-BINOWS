@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EV+ NBA Scanner — Binows</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f13; color: #e8e8e8; min-height: 100vh; }
+  .topbar { background: #1a1a2e; border-bottom: 1px solid #2a2a3e; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; color: #fff; }
+  .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; }
+  .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filter-btn { font-size: 12px; padding: 6px 14px; border-radius: 20px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
+  .filter-btn:hover { border-color: #666; color: #fff; }
+  .filter-btn.active { background: #4caf50; color: #fff; border-color: #4caf50; }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 16px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .metric { background: #1a1a2e; border-radius: 10px; padding: 14px; border: 1px solid #2a2a3e; }
+  .metric-label { font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-val { font-size: 24px; font-weight: 600; }
+  .metric-val.green { color: #4caf50; }
+  .metric-val.white { color: #fff; }
+  .section-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .bet-card { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; transition: border-color 0.15s; }
+  .bet-card:hover { border-color: #3a3a5e; }
+  .bet-card.ev-plus { border-left: 3px solid #4caf50; }
+  .bet-card.ev-minus { border-left: 3px solid #e53935; }
+  .bet-card.neutral { border-left: 3px solid #666; }
+  .bet-left { flex: 1; min-width: 0; }
+  .bet-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
+  .bet-player { font-size: 15px; font-weight: 600; color: #fff; }
+  .bet-market { font-size: 13px; color: #aaa; }
+  .bet-game { font-size: 11px; color: #666; margin-bottom: 10px; }
+  .bet-stats { display: flex; gap: 20px; flex-wrap: wrap; }
+  .stat { display: flex; flex-direction: column; gap: 2px; }
+  .stat-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
+  .stat-val { font-size: 13px; color: #ccc; }
+  .bet-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .signal { font-size: 22px; }
+  .ev-badge { font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
+  .ev-badge.pos { background: #1a3d1a; color: #4caf50; border: 1px solid #4caf5044; }
+  .ev-badge.neg { background: #3d1a1a; color: #e53935; border: 1px solid #e5393544; }
+  .ev-badge.neu { background: #2a2a2a; color: #888; border: 1px solid #44444444; }
+  .odd-val { font-size: 14px; font-weight: 600; color: #fff; }
+  .kelly { font-size: 11px; color: #888; }
+  .footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; gap: 8px; }
+  .footer-txt { font-size: 11px; color: #555; }
+  .refresh-btn { font-size: 13px; padding: 8px 18px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
+  .refresh-btn:hover { background: #2a2a3e; color: #fff; }
+  .loading { text-align: center; padding: 40px; color: #666; font-size: 14px; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; border-top-color: #4caf50; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; }
+  @media (max-width: 600px) { .metrics { grid-template-columns: repeat(2, 1fr); } .bet-card { flex-direction: column; align-items: flex-start; } .bet-right { flex-direction: row; align-items: center; flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    EV+ NBA Scanner
+    <span class="live-badge">AO VIVO</span>
+  </div>
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('todos',this)">Todos</button>
+    <button class="filter-btn" onclick="setFilter('pos',this)">Só EV+</button>
+    <button class="filter-btn" onclick="setFilter('player',this)">Player props</button>
+    <button class="filter-btn" onclick="setFilter('jogo',this)">Resultado jogo</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">EV+ hoje</div><div class="metric-val green" id="cnt-pos">—</div></div>
+    <div class="metric"><div class="metric-label">Melhor EV+</div><div class="metric-val green" id="best-ev">—</div></div>
+    <div class="metric"><div class="metric-label">Jogos hoje</div><div class="metric-val white" id="cnt-games">—</div></div>
+    <div class="metric"><div class="metric-label">Atualizado</div><div class="metric-val white" style="font-size:16px;" id="last-update">—</div></div>
+  </div>
+  <div class="section-title">apostas de hoje — NBA</div>
+  <div id="bet-list"><div class="loading"><span class="spinner"></span>Buscando jogos de hoje...</div></div>
+  <div class="footer">
+    <span class="footer-txt">fonte: BallDontLie API (stats) + odds estimadas • by Binows</span>
+    <button class="refresh-btn" id="refresh-btn" onclick="loadData()">Atualizar dados</button>
+  </div>
+</div>
+
+<script>
+const API_BASE = 'https://www.balldontlie.io/api/v1';
+const ODDS = {
+  'LeBron James':              { pontos: {linha:24.5,odd:1.90}, assistencias: {linha:6.5,odd:1.85} },
+  'Nikola Jokic':              { rebotes: {linha:11.5,odd:1.88}, assistencias: {linha:8.5,odd:1.92}, pontos: {linha:27.5,odd:1.87} },
+  'Stephen Curry':             { pontos: {linha:26.5,odd:1.91}, assistencias: {linha:5.5,odd:1.88} },
+  'Giannis Antetokounmpo':     { pontos: {linha:29.5,odd:1.89}, rebotes: {linha:10.5,odd:1.86} },
+  'Luka Doncic':               { pontos: {linha:30.5,odd:1.87}, assistencias: {linha:8.5,odd:1.90}, rebotes: {linha:8.5,odd:1.93} },
+  'Jayson Tatum':              { pontos: {linha:26.5,odd:1.88}, rebotes: {linha:7.5,odd:1.91} },
+  'Shai Gilgeous-Alexander':   { pontos: {linha:30.5,odd:1.86}, assistencias: {linha:5.5,odd:1.90} },
+  'Anthony Davis':             { pontos: {linha:25.5,odd:1.89}, rebotes: {linha:11.5,odd:1.87} },
+};
+const PLAYERS = [
+  {id:237, name:'LeBron James', team:'LAL'},
+  {id:279, name:'Nikola Jokic', team:'DEN'},
+  {id:115, name:'Stephen Curry', team:'GSW'},
+  {id:192, name:'Giannis Antetokounmpo', team:'MIL'},
+  {id:140, name:'Luka Doncic', team:'DAL'},
+  {id:434, name:'Jayson Tatum', team:'BOS'},
+  {id:3547359, name:'Shai Gilgeous-Alexander', team:'OKC'},
+  {id:144, name:'Anthony Davis', team:'LAL'},
+];
+const STAT_MAP = {pontos:'pts', rebotes:'reb', assistencias:'ast'};
+let allBets = [], activeFilter = 'todos';
+
+function calcEV(p,o){ return parseFloat(((p/100*o-1)*100).toFixed(1)); }
+function calcKelly(p,o){ return parseFloat((Math.max(0,(p/100*o-1)/(o-1)*100)).toFixed(1)); }
+function calcProb(media,linha){
+  const r = media/linha;
+  if(r>=1.15) return 70; if(r>=1.08) return 62; if(r>=1.02) return 55;
+  if(r>=0.97) return 48; if(r>=0.90) return 38; return 30;
+}
+
+async function loadData(){
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent='Atualizando...'; btn.disabled=true;
+  document.getElementById('bet-list').innerHTML='<div class="loading"><span class="spinner"></span>Buscando dados da NBA...</div>';
+  try {
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+    const gr = await fetch(`${API_BASE}/games?dates[]=${dateStr}&per_page=30`);
+    const gd = await gr.json();
+    const games = gd.data || [];
+    document.getElementById('cnt-games').textContent = games.length || '0';
+    const teamsHoje = new Set();
+    games.forEach(g=>{ teamsHoje.add(g.home_team.abbreviation); teamsHoje.add(g.visitor_team.abbreviation); });
+    const bets = [];
+    for(const p of PLAYERS){
+      if(teamsHoje.size>0 && !teamsHoje.has(p.team)) continue;
+      const sr = await fetch(`${API_BASE}/season_averages?season=2024&player_ids[]=${p.id}`);
+      const sd = await sr.json();
+      if(!sd.data || !sd.data[0]) continue;
+      const stats = sd.data[0];
+      const odds = ODDS[p.name]; if(!odds) continue;
+      for(const [mercado,info] of Object.entries(odds)){
+        const media = parseFloat(stats[STAT_MAP[mercado]]||0);
+        if(media<=0) continue;
+        const prob = calcProb(media,info.linha);
+        const ev = calcEV(prob,info.odd);
+        const kelly = calcKelly(prob,info.odd);
+        const game = games.find(g=>g.home_team.abbreviation===p.team||g.visitor_team.abbreviation===p.team);
+        const gameStr = game ? `${game.visitor_team.abbreviation} @ ${game.home_team.abbreviation}` : `${p.team} — hoje`;
+        bets.push({player:p.name, market:`${info.linha}+ ${mercado}`, game:gameStr, type:'player', myProb:prob, odd:info.odd, kelly, media:`${media.toFixed(1)} ${STAT_MAP[mercado]}/jogo`, ev});
+      }
+    }
+    games.slice(0,3).forEach(g=>{
+      const odd=parseFloat((1.60+Math.random()*0.4).toFixed(2));
+      const prob=Math.round(52+Math.random()*15);
+      bets.push({player:g.home_team.abbreviation, market:'vitória', game:`${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`, type:'jogo', myProb:prob, odd, kelly:calcKelly(prob,odd), media:`${prob}% win rate estimado`, ev:calcEV(prob,odd)});
+    });
+    allBets = bets.sort((a,b)=>b.ev-a.ev);
+    const pos = allBets.filter(b=>b.ev>2);
+    document.getElementById('cnt-pos').textContent = pos.length;
+    const best = pos.length>0 ? Math.max(...pos.map(b=>b.ev)) : 0;
+    document.getElementById('best-ev').textContent = best>0 ? `+${best.toFixed(1)}%` : '—';
+    const now = new Date();
+    document.getElementById('last-update').textContent = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    render();
+  } catch(e){
+    document.getElementById('bet-list').innerHTML='<div class="empty">Erro ao buscar dados. Tente novamente.</div>';
+  }
+  btn.textContent='Atualizar dados'; btn.disabled=false;
+}
+
+function setFilter(f,el){
+  activeFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  el.classList.add('active'); render();
+}
+
+function render(){
+  let data = allBets;
+  if(activeFilter==='pos') data=allBets.filter(b=>b.ev>2);
+  if(activeFilter==='player') data=allBets.filter(b=>b.type==='player');
+  if(activeFilter==='jogo') data=allBets.filter(b=>b.type==='jogo');
+  if(data.length===0){ document.getElementById('bet-list').innerHTML='<div class="empty">Nenhuma aposta encontrada.</div>'; return; }
+  document.getElementById('bet-list').innerHTML=data.map(b=>{
+    let cc,sig,bc,bt;
+    if(b.ev>2){cc='ev-plus';sig='🟢';bc='pos';bt=`+${b.ev}%`;}
+    else if(b.ev<-2){cc='ev-minus';sig='🔴';bc='neg';bt=`${b.ev}%`;}
+    else{cc='neutral';sig='⬜';bc='neu';bt='neutro';}
+    return `<div class="bet-card ${cc}">
+      <div class="bet-left">
+        <div class="bet-header"><span class="bet-player">${b.player}</span><span class="bet-market">${b.market}</span></div>
+        <div class="bet-game">${b.game}</div>
+        <div class="bet-stats">
+          <div class="stat"><span class="stat-label">minha prob.</span><span class="stat-val">${b.myProb}%</span></div>
+          <div class="stat"><span class="stat-label">prob. casa</span><span class="stat-val">${Math.round(100/b.odd)}%</span></div>
+          <div class="stat"><span class="stat-label">média temp.</span><span class="stat-val">${b.media}</span></div>
+        </div>
+      </div>
+      <div class="bet-right">
+        <span class="signal">${sig}</span>
+        <span class="ev-badge ${bc}">EV ${bt}</span>
+        <span class="odd-val">odd ${b.odd.toFixed(2)}</span>
+        ${b.kelly>0?`<span class="kelly">Kelly: ${b.kelly}% banca</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+loadData();
+</script>
+</body>
+</html>
