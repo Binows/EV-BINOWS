@@ -132,7 +132,7 @@ async function loadData() {
 
     const today = new Date().toISOString().split('T')[0];
     const now = new Date();
-const todayEvents = events.filter(e => {
+    const todayEvents = events.filter(e => {
   const gameTime = new Date(e.commence_time);
   return e.commence_time.startsWith(today) && gameTime > now;
 });
