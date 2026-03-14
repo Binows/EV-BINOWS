@@ -501,12 +501,7 @@ function renderTopEV(topList) {
 }
 
 
-  const pos = bets.filter(b => b.ev > 2);
-  document.getElementById('cnt-pos').textContent   = pos.length;
-  document.getElementById('cnt-total').textContent  = total;
-  const best = pos.length > 0 ? Math.max(...pos.map(b => b.ev)) : 0;
-  document.getElementById('best-ev').textContent    = best > 0 ? '+' + best.toFixed(1) + '%' : '—';
-}
+
 
 // ─────────────────────────────────────────────
 // LIVE MODE (Odds API — mantido do original)
