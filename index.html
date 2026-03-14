@@ -131,7 +131,11 @@ async function loadData() {
     }
 
     const today = new Date().toISOString().split('T')[0];
-    const todayEvents = events.filter(e => e.commence_time.startsWith(today));
+    const now = new Date();
+const todayEvents = events.filter(e => {
+  const gameTime = new Date(e.commence_time);
+  return e.commence_time.startsWith(today) && gameTime > now;
+});
     const useEvents = todayEvents.length > 0 ? todayEvents : events.slice(0, 3);
 
     const bets = [];
