@@ -92,6 +92,19 @@
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; line-height: 1.8; }
 
+  /* TOP EV+ RANKING */
+  .top-ev { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: none; }
+  .top-ev-title { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .top-ev-list { display: flex; flex-direction: column; gap: 6px; }
+  .top-ev-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #0f0f13; border-radius: 8px; border: 1px solid #2a2a3e; border-left: 3px solid #4caf50; }
+  .top-ev-rank { font-size: 12px; color: #555; width: 18px; text-align: right; flex-shrink: 0; }
+  .top-ev-player { font-size: 13px; font-weight: 600; color: #fff; flex: 1; }
+  .top-ev-line { font-size: 12px; color: #888; }
+  .top-ev-odd { font-size: 13px; color: #ccc; margin-left: auto; }
+  .top-ev-ev { font-size: 13px; font-weight: 700; color: #4caf50; min-width: 56px; text-align: right; }
+  .top-ev-banca { font-size: 11px; color: #4caf5099; min-width: 64px; text-align: right; }
+  .top-ev-last5 { font-size: 11px; color: #555; min-width: 80px; text-align: right; }
+
   /* LIVE MODE extras */
   .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
   .req-info { font-size: 11px; color: #4caf50; }
@@ -149,6 +162,12 @@
         <button class="btn-sm" onclick="clearData()">✕ Limpar</button>
       </div>
     </div>
+    <!-- TOP EV+ RANKING -->
+    <div class="top-ev" id="top-ev-box">
+      <div class="top-ev-title">🏆 maiores EV+ desta rodada</div>
+      <div class="top-ev-list" id="top-ev-list"></div>
+    </div>
+
     <div class="section-title" id="manual-section-title" style="display:none">player props — bet365</div>
     <div id="manual-list"></div>
   </div>
@@ -328,6 +347,7 @@ function renderManual() {
   // Para cada jogador, processa as linhas com Poisson
   const allCards = [];
   let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
+  const topEVItems = [];
 
   const html = players.map(p => {
     const linesEntries = Object.entries(p.lines || {});
@@ -367,7 +387,10 @@ function renderManual() {
       }
 
       totalLines++;
-      if (ev > 3) { evPlusCount++; playerHasEV = true; }
+      if (ev > 3) {
+        evPlusCount++; playerHasEV = true;
+        topEVItems.push({ player: p.player, label, odd, ev, kelly, lineNum: parseInt(label), last5 });
+      }
       if (ev > bestEV) bestEV = ev;
 
       const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
@@ -431,6 +454,10 @@ function renderManual() {
 
   list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
 
+  // Ranking top EV+
+  topEVItems.sort((a, b) => b.ev - a.ev);
+  renderTopEV(topEVItems);
+
   // Métricas
   document.getElementById('cnt-pos').textContent   = evPlusCount;
   document.getElementById('cnt-total').textContent  = totalLines;
@@ -452,7 +479,28 @@ function hasEVPlus(p) {
   return sorted.some(({ odd, k }) => calcEV(poissonCDF(lambda, k), odd) > 3);
 }
 
-function updateMetrics(bets, total) {
+function renderTopEV(topList) {
+  const box = document.getElementById('top-ev-box');
+  const list = document.getElementById('top-ev-list');
+  if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  list.innerHTML = topList.slice(0, 8).map((item, i) => {
+    const hitStr = item.last5.length > 0
+      ? item.last5.filter(x => x >= item.lineNum).length + '/' + item.last5.length
+      : '';
+    return `<div class="top-ev-item">
+      <span class="top-ev-rank">${i + 1}</span>
+      <span class="top-ev-player">${item.player}</span>
+      <span class="top-ev-line">${item.label}</span>
+      <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
+      <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
+      <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
+      <span class="top-ev-last5">${hitStr ? 'Últ.5: ' + hitStr : ''}</span>
+    </div>`;
+  }).join('');
+}
+
+
   const pos = bets.filter(b => b.ev > 2);
   document.getElementById('cnt-pos').textContent   = pos.length;
   document.getElementById('cnt-total').textContent  = total;
