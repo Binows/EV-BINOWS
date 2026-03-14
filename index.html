@@ -88,29 +88,25 @@ const BASE = 'https://api.the-odds-api.com/v4';
 const SPORT = 'basketball_nba';
 const MARKETS = 'player_points,player_rebounds,player_assists';
 const BOOKS = 'pinnacle,draftkings,fanduel';
+const MKT_LABEL = { player_points:'pontos', player_rebounds:'rebotes', player_assists:'assistências' };
+const MKT_TYPE = { player_points:'pts', player_rebounds:'reb', player_assists:'ast' };
 
-const MKT_LABEL = {
-  player_points: 'pontos',
-  player_rebounds: 'rebotes',
-  player_assists: 'assistências'
-};
-const MKT_TYPE = {
-  player_points: 'pts',
-  player_rebounds: 'reb',
-  player_assists: 'ast'
-};
-
-let allBets = [], activeFilter = 'todos';
+let allBets = [];
+let activeFilter = 'todos';
 
 function toDecimal(o) {
   return o > 0 ? parseFloat((o/100+1).toFixed(3)) : parseFloat((100/Math.abs(o)+1).toFixed(3));
 }
 function calcEV(p, o) { return parseFloat(((p/100*o-1)*100).toFixed(1)); }
 function calcKelly(p, o) { return parseFloat((Math.max(0,(p/100*o-1)/(o-1)*100)).toFixed(1)); }
-function fairProb(books) {
-  const total = books.reduce((s,b) => s+1/b, 0);
-  const probs = books.map(b => (1/b)/total*100);
+function getFairProb(oddsArr) {
+  const total = oddsArr.reduce((s,o) => s+1/o, 0);
+  const probs = oddsArr.map(o => (1/o)/total*100);
   return parseFloat((probs.reduce((s,p)=>s+p,0)/probs.length).toFixed(1));
+}
+function updateClock() {
+  const t = new Date();
+  document.getElementById('last-update').textContent = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
 }
 
 async function loadData() {
@@ -120,47 +116,63 @@ async function loadData() {
   document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando jogos de hoje...</div>';
 
   try {
-    const evRes = await fetch(`${BASE}/sports/${SPORT}/events?apiKey=${KEY}`);
-    if (!evRes.ok) throw new Error('Erro ao buscar eventos: ' + evRes.status);
+    const evRes = await fetch(BASE + '/sports/' + SPORT + '/events?apiKey=' + KEY);
+    if (!evRes.ok) throw new Error('Erro ' + evRes.status + ' ao buscar eventos');
     const events = await evRes.json();
+
     if (!Array.isArray(events) || events.length === 0) {
-      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo encontrado.<br>Tente novamente mais tarde.</div>';
+      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo encontrado.<br>Tente mais tarde.</div>';
       btn.textContent = 'Atualizar'; btn.disabled = false;
       return;
     }
 
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    let upcoming = events.filter(e => {
-      const t = new Date(e.commence_time);
-      return e.commence_time.startsWith(todayStr) && t > now;
+    const agora = new Date();
+    const hojeStr = agora.toISOString().split('T')[0];
+
+    let jogos = events.filter(function(e) {
+      var t = new Date(e.commence_time);
+      return e.commence_time.startsWith(hojeStr) && t > agora;
     });
-    if (upcoming.length === 0) upcoming = events.filter(e => new Date(e.commence_time) > now).slice(0, 4);
-    if (upcoming.length === 0) {
+
+    if (jogos.length === 0) {
+      jogos = events.filter(function(e) {
+        return new Date(e.commence_time) > agora;
+      }).slice(0, 4);
+    }
+
+    if (jogos.length === 0) {
       document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo futuro encontrado hoje.</div>';
       btn.textContent = 'Atualizar'; btn.disabled = false;
       return;
     }
 
-    const bets = [];
-    for (const ev of upcoming.slice(0, 4)) {
-      document.getElementById('bet-list').innerHTML = `<div class="loading"><span class="spinner"></span>Buscando props: ${ev.away_team} @ ${ev.home_team}...</div>`;
-      const pRes = await fetch(`${BASE}/sports/${SPORT}/events/${ev.id}/odds?apiKey=${KEY}&regions=us&markets=${MARKETS}&bookmakers=${BOOKS}&oddsFormat=american`);
+    var bets = [];
+
+    for (var i = 0; i < Math.min(jogos.length, 4); i++) {
+      var ev = jogos[i];
+      document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando props: ' + ev.away_team + ' @ ' + ev.home_team + '...</div>';
+
+      var pRes = await fetch(BASE + '/sports/' + SPORT + '/events/' + ev.id + '/odds?apiKey=' + KEY + '&regions=us&markets=' + MARKETS + '&bookmakers=' + BOOKS + '&oddsFormat=american');
       if (!pRes.ok) continue;
-      const rem = pRes.headers.get('x-requests-remaining');
+
+      var rem = pRes.headers.get('x-requests-remaining');
       if (rem) document.getElementById('req-info').textContent = rem + ' req restantes';
-      const pData = await pRes.json();
+
+      var pData = await pRes.json();
       if (!pData.bookmakers || pData.bookmakers.length === 0) continue;
 
-      const gameStr = `${ev.away_team} @ ${ev.home_team}`;
-      const playerMap = {};
+      var gameStr = ev.away_team + ' @ ' + ev.home_team;
+      var playerMap = {};
 
-      for (const book of pData.bookmakers) {
-        for (const mkt of book.markets) {
+      for (var b = 0; b < pData.bookmakers.length; b++) {
+        var book = pData.bookmakers[b];
+        for (var m = 0; m < book.markets.length; m++) {
+          var mkt = book.markets[m];
           if (!MKT_LABEL[mkt.key]) continue;
-          for (const out of mkt.outcomes) {
+          for (var o = 0; o < mkt.outcomes.length; o++) {
+            var out = mkt.outcomes[o];
             if (out.name !== 'Over') continue;
-            const k = `${out.description}||${mkt.key}||${out.point}`;
+            var k = out.description + '||' + mkt.key + '||' + out.point;
             if (!playerMap[k]) {
               playerMap[k] = {
                 player: out.description,
@@ -168,49 +180,53 @@ async function loadData() {
                 type: MKT_TYPE[mkt.key],
                 line: out.point,
                 game: gameStr,
-                odds: []
+                odds: [],
+                books: []
               };
             }
-            playerMap[k].odds.push({ book: book.key, dec: toDecimal(out.price) });
+            playerMap[k].odds.push(toDecimal(out.price));
+            playerMap[k].books.push(book.key);
           }
         }
       }
 
-      for (const [, d] of Object.entries(playerMap)) {
+      var keys = Object.keys(playerMap);
+      for (var ki = 0; ki < keys.length; ki++) {
+        var d = playerMap[keys[ki]];
         if (d.odds.length < 2) continue;
-        const best = d.odds.reduce((a,b) => a.dec > b.dec ? a : b);
-        const fp = fairProb(d.odds.map(o => o.dec));
-        const ev = calcEV(fp, best.dec);
-        const kelly = calcKelly(fp, best.dec);
+        var bestOdd = Math.max.apply(null, d.odds);
+        var bestBook = d.books[d.odds.indexOf(bestOdd)];
+        var fp = getFairProb(d.odds);
+        var ev2 = calcEV(fp, bestOdd);
+        var kelly = calcKelly(fp, bestOdd);
         bets.push({
           player: d.player,
-          market: `${d.line}+ ${d.label}`,
+          market: d.line + '+ ' + d.label,
           type: d.type,
           game: d.game,
           prob: fp,
-          casaProb: Math.round(100/best.dec),
-          odd: best.dec,
-          book: best.book,
-          kelly,
-          ev,
+          casaProb: Math.round(100/bestOdd),
+          odd: bestOdd,
+          book: bestBook,
+          kelly: kelly,
+          ev: ev2,
           n: d.odds.length
         });
       }
     }
 
-    allBets = bets.sort((a,b) => b.ev - a.ev);
-    const pos = allBets.filter(b => b.ev > 2);
+    allBets = bets.sort(function(a,b){ return b.ev - a.ev; });
+    var pos = allBets.filter(function(b){ return b.ev > 2; });
     document.getElementById('cnt-pos').textContent = pos.length;
     document.getElementById('cnt-total').textContent = allBets.length;
-    const best = pos.length > 0 ? Math.max(...pos.map(b=>b.ev)) : 0;
-    document.getElementById('best-ev').textContent = best > 0 ? `+${best.toFixed(1)}%` : '—';
-    const n = new Date();
-    document.getElementById('last-update').textContent = `${String(n.getHours()).padStart(2,'0')}:${String(n.getMinutes()).padStart(2,'0')}`;
+    var bestEV = pos.length > 0 ? Math.max.apply(null, pos.map(function(b){ return b.ev; })) : 0;
+    document.getElementById('best-ev').textContent = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+    updateClock();
     render();
 
   } catch(e) {
     console.error(e);
-    document.getElementById('bet-list').innerHTML = `<div class="empty">Erro: ${e.message}<br>Verifique o console (F12) para detalhes.</div>`;
+    document.getElementById('bet-list').innerHTML = '<div class="empty">Erro: ' + e.message + '<br>Abra o console (F12) para detalhes.</div>';
   }
 
   btn.textContent = 'Atualizar';
@@ -219,44 +235,46 @@ async function loadData() {
 
 function setFilter(f, el) {
   activeFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('active'); });
   el.classList.add('active');
   render();
 }
 
 function render() {
-  let data = allBets;
-  if (activeFilter === 'pos') data = allBets.filter(b => b.ev > 2);
-  if (activeFilter === 'pts') data = allBets.filter(b => b.type === 'pts');
-  if (activeFilter === 'reb') data = allBets.filter(b => b.type === 'reb');
-  if (activeFilter === 'ast') data = allBets.filter(b => b.type === 'ast');
+  var data = allBets;
+  if (activeFilter === 'pos') data = allBets.filter(function(b){ return b.ev > 2; });
+  if (activeFilter === 'pts') data = allBets.filter(function(b){ return b.type === 'pts'; });
+  if (activeFilter === 'reb') data = allBets.filter(function(b){ return b.type === 'reb'; });
+  if (activeFilter === 'ast') data = allBets.filter(function(b){ return b.type === 'ast'; });
+
   if (data.length === 0) {
     document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhuma aposta encontrada.</div>';
     return;
   }
-  document.getElementById('bet-list').innerHTML = data.map(b => {
-    let cc, sig, bc, bt;
-    if (b.ev > 2) { cc='ev-plus'; sig='🟢'; bc='pos'; bt=`+${b.ev}%`; }
-    else if (b.ev < -2) { cc='ev-minus'; sig='🔴'; bc='neg'; bt=`${b.ev}%`; }
+
+  document.getElementById('bet-list').innerHTML = data.map(function(b) {
+    var cc, sig, bc, bt;
+    if (b.ev > 2) { cc='ev-plus'; sig='🟢'; bc='pos'; bt='+'+b.ev+'%'; }
+    else if (b.ev < -2) { cc='ev-minus'; sig='🔴'; bc='neg'; bt=b.ev+'%'; }
     else { cc='neutral'; sig='⬜'; bc='neu'; bt='neutro'; }
-    return `<div class="bet-card ${cc}">
-      <div class="bet-left">
-        <div class="bet-header"><span class="bet-player">${b.player}</span><span class="bet-market">${b.market}</span></div>
-        <div class="bet-game">${b.game}</div>
-        <div class="bet-stats">
-          <div class="stat"><span class="stat-label">prob. fair</span><span class="stat-val">${b.prob}%</span></div>
-          <div class="stat"><span class="stat-label">prob. casa</span><span class="stat-val">${b.casaProb}%</span></div>
-          <div class="stat"><span class="stat-label">casas</span><span class="stat-val">${b.n}</span></div>
-          <div class="stat"><span class="stat-label">melhor em</span><span class="stat-val">${b.book}</span></div>
-        </div>
-      </div>
-      <div class="bet-right">
-        <span class="signal">${sig}</span>
-        <span class="ev-badge ${bc}">EV ${bt}</span>
-        <span class="odd-val">odd ${b.odd.toFixed(2)}</span>
-        ${b.kelly > 0 ? `<span class="kelly">Kelly: ${b.kelly}% banca</span>` : ''}
-      </div>
-    </div>`;
+    return '<div class="bet-card ' + cc + '">' +
+      '<div class="bet-left">' +
+        '<div class="bet-header"><span class="bet-player">' + b.player + '</span><span class="bet-market">' + b.market + '</span></div>' +
+        '<div class="bet-game">' + b.game + '</div>' +
+        '<div class="bet-stats">' +
+          '<div class="stat"><span class="stat-label">prob. fair</span><span class="stat-val">' + b.prob + '%</span></div>' +
+          '<div class="stat"><span class="stat-label">prob. casa</span><span class="stat-val">' + b.casaProb + '%</span></div>' +
+          '<div class="stat"><span class="stat-label">casas</span><span class="stat-val">' + b.n + '</span></div>' +
+          '<div class="stat"><span class="stat-label">melhor em</span><span class="stat-val">' + b.book + '</span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="bet-right">' +
+        '<span class="signal">' + sig + '</span>' +
+        '<span class="ev-badge ' + bc + '">EV ' + bt + '</span>' +
+        '<span class="odd-val">odd ' + b.odd.toFixed(2) + '</span>' +
+        (b.kelly > 0 ? '<span class="kelly">Kelly: ' + b.kelly + '% banca</span>' : '') +
+      '</div>' +
+    '</div>';
   }).join('');
 }
 
