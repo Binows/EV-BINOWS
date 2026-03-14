@@ -166,6 +166,7 @@
     <!-- TOP EV+ RANKING -->
     <div class="top-ev" id="top-ev-box">
       <div class="top-ev-title">🏆 maiores EV+ desta rodada</div>
+      <div id="nba-status" style="display:none;font-size:11px;color:#4caf5099;margin-bottom:8px"></div>
       <div class="top-ev-list" id="top-ev-list"></div>
     </div>
 
@@ -385,8 +386,177 @@ function clearData() {
 }
 
 // ─────────────────────────────────────────────
-// MANUAL MODE — RENDER
+// NBA STATS API — GAME LOGS DA TEMPORADA
 // ─────────────────────────────────────────────
+const NBA_CACHE   = {};   // playerName → { logs: [...], ts: Date }
+const NBA_ID_CACHE = {};  // playerName → playerId
+const SEASON = '2024-25';
+const PROXY  = 'https://corsproxy.io/?';
+
+function nbaHeaders() {
+  return {
+    'Accept': 'application/json',
+    'Referer': 'https://www.nba.com/',
+    'Origin': 'https://www.nba.com',
+    'x-nba-stats-origin': 'stats',
+    'x-nba-stats-token': 'true'
+  };
+}
+
+async function fetchNBAPlayerID(name) {
+  if (NBA_ID_CACHE[name]) return NBA_ID_CACHE[name];
+  try {
+    const url = `https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=1`;
+    const res  = await fetch(PROXY + encodeURIComponent(url), { headers: nbaHeaders() });
+    const data = await res.json();
+    const rows = data.resultSets[0].rowSet;
+    const hdrs = data.resultSets[0].headers;
+    const idIdx   = hdrs.indexOf('PERSON_ID');
+    const nameIdx = hdrs.indexOf('DISPLAY_FIRST_LAST');
+    // Busca nome exato ou aproximado
+    const nameLower = name.toLowerCase().trim();
+    let match = rows.find(r => r[nameIdx].toLowerCase() === nameLower);
+    if (!match) {
+      // Tenta por sobrenome + primeiro nome parcial
+      const parts = nameLower.split(' ');
+      match = rows.find(r => {
+        const rn = r[nameIdx].toLowerCase();
+        return parts.every(p => rn.includes(p));
+      });
+    }
+    if (!match) return null;
+    NBA_ID_CACHE[name] = match[idIdx];
+    return match[idIdx];
+  } catch(e) { return null; }
+}
+
+async function fetchNBAGameLogs(playerName) {
+  const cached = NBA_CACHE[playerName];
+  if (cached && (Date.now() - cached.ts) < 3600000) return cached.logs;
+  try {
+    const playerId = await fetchNBAPlayerID(playerName);
+    if (!playerId) return null;
+    const url = `https://stats.nba.com/stats/playergamelogs?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular+Season`;
+    const res  = await fetch(PROXY + encodeURIComponent(url), { headers: nbaHeaders() });
+    const data = await res.json();
+    const rows = data.resultSets[0].rowSet;
+    const hdrs = data.resultSets[0].headers;
+    const pts  = hdrs.indexOf('PTS');
+    const reb  = hdrs.indexOf('REB');
+    const ast  = hdrs.indexOf('AST');
+    const fg3  = hdrs.indexOf('FG3M');
+    const logs = rows.map(r => ({ pts: r[pts], reb: r[reb], ast: r[ast], fg3: r[fg3] }));
+    NBA_CACHE[playerName] = { logs, ts: Date.now() };
+    return logs;
+  } catch(e) { return null; }
+}
+
+function calcSeasonHitRate(logs, market, lineNum) {
+  if (!logs || logs.length === 0) return null;
+  const key = { pontos: 'pts', rebotes: 'reb', assistências: 'ast', '3pts': 'fg3' }[market];
+  if (!key) return null;
+  const hits = logs.filter(g => g[key] >= lineNum).length;
+  return { hits, games: logs.length, pct: Math.round(hits / logs.length * 100) };
+}
+
+function calcKellyFromSeason(prob, odd, seasonHR) {
+  if (odd <= 1) return 0;
+  let kelly = Math.max(0, (prob * odd - 1) / (odd - 1)) * 50;
+  kelly = Math.min(kelly, 2.5);
+  if (seasonHR) {
+    const pct = seasonHR.pct / 100;
+    if      (pct === 0)    kelly = 0;
+    else if (pct < 0.20)   kelly = Math.min(kelly * 0.2, 0.25);
+    else if (pct < 0.40)   kelly = kelly * 0.4;
+    else if (pct < 0.55)   kelly = kelly * 0.6;
+    else if (pct < 0.70)   kelly = kelly * 0.8;
+    // >= 70% → sem penalidade
+  }
+  return parseFloat(kelly.toFixed(2));
+}
+
+// Busca game logs de todos os jogadores em paralelo e atualiza os cards
+async function loadSeasonStats(players) {
+  const statusEl = document.getElementById('nba-status');
+  if (statusEl) { statusEl.textContent = '⏳ Buscando stats da temporada...'; statusEl.style.display = 'block'; }
+
+  const unique = [...new Map(players.map(p => [p.player, p])).values()];
+  let done = 0;
+
+  await Promise.all(unique.map(async (p) => {
+    const logs = await fetchNBAGameLogs(p.player);
+    done++;
+    if (statusEl) statusEl.textContent = `⏳ Stats da temporada: ${done}/${unique.length} jogadores...`;
+    if (!logs) return;
+    // Atualiza todos os cards desse jogador no DOM
+    updatePlayerCards(p.player, p.market, logs);
+  }));
+
+  if (statusEl) { statusEl.textContent = '✓ Stats da temporada carregados'; setTimeout(() => statusEl.style.display = 'none', 3000); }
+  // Re-renderiza o ranking com dados atualizados
+  renderTopEVFromDOM();
+}
+
+function updatePlayerCards(playerName, market, logs) {
+  // Cada line-card tem id="lc-{playerslug}-{linenum}"
+  const slug = playerSlug(playerName);
+  const cards = document.querySelectorAll(`[data-player="${slug}"]`);
+  cards.forEach(card => {
+    const lineNum = parseInt(card.getAttribute('data-line'));
+    const odd     = parseFloat(card.getAttribute('data-odd'));
+    const prob    = parseFloat(card.getAttribute('data-prob'));
+    const ev      = parseFloat(card.getAttribute('data-ev'));
+    if (isNaN(lineNum) || isNaN(odd)) return;
+
+    const hr = calcSeasonHitRate(logs, market, lineNum);
+    if (!hr) return;
+
+    const kelly = calcKellyFromSeason(prob, odd, hr);
+
+    // Atualiza hit rate da temporada
+    const hrEl = card.querySelector('.season-hr');
+    if (hrEl) hrEl.textContent = `${hr.hits}/${hr.games} (${hr.pct}%)`;
+
+    // Atualiza % da banca
+    const kellyEl = card.querySelector('.kelly-val');
+    if (kellyEl) {
+      kellyEl.textContent = kelly > 0 ? kelly.toFixed(2) + '%' : '—';
+      kellyEl.className   = 'line-stat-val kelly-val' + (kelly > 0 ? ' pos' : '');
+    }
+
+    // Atualiza data-kelly para o ranking
+    card.setAttribute('data-kelly', kelly);
+  });
+}
+
+function playerSlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+}
+
+function renderTopEVFromDOM() {
+  // Relê os valores atualizados do DOM para reconstruir o ranking
+  const cards = document.querySelectorAll('[data-player][data-ev]');
+  const items = [];
+  cards.forEach(card => {
+    const ev = parseFloat(card.getAttribute('data-ev'));
+    if (ev <= 3) return;
+    items.push({
+      player:   card.getAttribute('data-name'),
+      market:   card.getAttribute('data-market'),
+      mktLabel: card.getAttribute('data-mktlabel'),
+      label:    card.getAttribute('data-label'),
+      odd:      parseFloat(card.getAttribute('data-odd')),
+      ev,
+      kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
+      lineNum:  parseInt(card.getAttribute('data-line')),
+      last5:    JSON.parse(card.getAttribute('data-last5') || '[]')
+    });
+  });
+  items.sort((a, b) => b.ev - a.ev);
+  renderTopEV(items);
+}
+
+
 function renderManual() {
   if (!allDatasets.length) return;
 
@@ -443,13 +613,15 @@ function renderManual() {
 
     const last5 = p.last5 || [];
     let playerHasEV = false;
+    const slug = playerSlug(p.player);
 
     const lineCards = sorted.map(({ label, odd, k }) => {
       let prob = fairProb(odd), ev = 0, kelly = 0;
       if (lambda !== null) {
         prob  = poissonCDF(lambda, k);
         ev    = calcEV(prob, odd);
-        kelly = calcKelly(prob, odd, last5, parseInt(label));
+        // Kelly provisório sem season stats (será atualizado assincronamente)
+        kelly = parseFloat(Math.min(Math.max(0, (prob * odd - 1) / (odd - 1)) * 50, 2.5).toFixed(2));
       }
       totalLines++;
       if (ev > 3) {
@@ -461,18 +633,19 @@ function renderManual() {
       const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
       const sigCls = ev > 3 ? 'pos'     : ev < -3 ? 'neg'      : 'neu';
       const sigTxt = ev > 3 ? 'EV+'     : ev < -3 ? 'EV−'      : 'neutro';
-      const lineNum  = parseInt(label);
-      const hitCount = last5.filter(x => x >= lineNum).length;
-      const hitRate  = last5.length > 0 ? Math.round(hitCount / last5.length * 100) : null;
+      const lineNum = parseInt(label);
 
-      return `<div class="line-card ${cls}">
+      return `<div class="line-card ${cls}"
+        data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
+        data-label="${label}" data-line="${lineNum}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
+        data-ev="${ev}" data-kelly="${kelly}" data-last5='${JSON.stringify(last5)}'>
         <div class="line-label">${label} ${mktLabel.toLowerCase()}</div>
         <div class="line-odd">${odd.toFixed(2)}</div>
         <div class="line-stats">
           <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">${(prob*100).toFixed(1)}%</span></div>
           <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
-          <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val ${kelly>0?'pos':''}">${kelly>0?kelly.toFixed(1)+'%':'—'}</span></div>
-          ${hitRate !== null ? `<div class="line-stat"><span class="line-stat-label">Últimos 5</span><span class="line-stat-val">${hitCount}/5 (${hitRate}%)</span></div>` : ''}
+          <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val ${kelly>0?'pos':''}">${kelly>0?kelly+'%':'—'}</span></div>
+          <div class="line-stat"><span class="line-stat-label">Hit rate temporada</span><span class="line-stat-val season-hr" style="color:#555">carregando...</span></div>
         </div>
         <span class="ev-signal ${sigCls}">${sigTxt}</span>
       </div>`;
@@ -488,7 +661,6 @@ function renderManual() {
         <div class="player-name">${p.player}</div>
         <div class="player-meta">
           <span class="market-badge">${mkt}</span>
-          ${last5.length > 0 ? `<span class="last5">Últ. 5: ${last5html}</span>` : ''}
           ${lambda !== null ? `<span class="last5" style="color:#555">λ=${lambda.toFixed(2)}</span>` : ''}
         </div>
       </div>
@@ -498,7 +670,7 @@ function renderManual() {
 
   list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
 
-  // Ranking top EV+
+  // Ranking top EV+ provisório
   topEVItems.sort((a, b) => b.ev - a.ev);
   renderTopEV(topEVItems);
 
@@ -509,6 +681,9 @@ function renderManual() {
   document.getElementById('last-update').textContent = latestScrapedAt
     ? new Date(latestScrapedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     : '—';
+
+  // Busca stats da temporada em paralelo
+  loadSeasonStats(allPlayers);
 }
 
 function hasEVPlus(p) {
