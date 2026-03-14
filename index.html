@@ -265,15 +265,19 @@ function calcKelly(prob, odd, last5, lineNum) {
   if (odd <= 1) return 0;
   // Meio Kelly base
   let kelly = Math.max(0, (prob * odd - 1) / (odd - 1)) * 50;
-  // Hit rate nos últimos 5 como fator de confiança
+  // Teto de 2.5% da banca
+  kelly = Math.min(kelly, 2.5);
+  // Penalidade pelo hit rate nos últimos 5
   if (last5 && last5.length > 0 && lineNum) {
     const hits = last5.filter(x => x >= lineNum).length;
-    const hitRate = hits / last5.length;
-    // Penaliza se hit rate < 40% (menos de 2/5)
-    if (hitRate < 0.4) kelly *= hitRate / 0.4;
+    if      (hits === 0) kelly = 0;
+    else if (hits === 1) kelly = Math.min(kelly * 0.2, 0.25);
+    else if (hits === 2) kelly = kelly * 0.4;
+    else if (hits === 3) kelly = kelly * 0.6;
+    else if (hits === 4) kelly = kelly * 0.8;
+    // hits === 5 → sem penalidade
   }
-  // Teto de 2.5% da banca por aposta
-  return parseFloat(Math.min(kelly, 2.5).toFixed(1));
+  return parseFloat(kelly.toFixed(2));
 }
 
 // Detecta mercado pelo nome do arquivo ou conteúdo
