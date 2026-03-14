@@ -7,58 +7,113 @@
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f13; color: #e8e8e8; min-height: 100vh; }
+
+  /* TOPBAR */
   .topbar { background: #1a1a2e; border-bottom: 1px solid #2a2a3e; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
   .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; color: #fff; }
   .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; }
-  .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
+
+  /* MODE TABS */
+  .mode-tabs { display: flex; gap: 4px; background: #0f0f13; border-radius: 8px; padding: 4px; }
+  .mode-tab { font-size: 12px; padding: 6px 16px; border-radius: 6px; border: none; background: transparent; color: #888; cursor: pointer; transition: all 0.15s; }
+  .mode-tab.active { background: #2a2a3e; color: #fff; }
+
+  /* FILTERS */
   .filters { display: flex; gap: 8px; flex-wrap: wrap; }
   .filter-btn { font-size: 12px; padding: 6px 14px; border-radius: 20px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
   .filter-btn:hover { border-color: #666; color: #fff; }
   .filter-btn.active { background: #4caf50; color: #fff; border-color: #4caf50; }
-  .container { max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+
+  .container { max-width: 980px; margin: 0 auto; padding: 24px 16px; }
+
+  /* METRICS */
   .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
   .metric { background: #1a1a2e; border-radius: 10px; padding: 14px; border: 1px solid #2a2a3e; }
   .metric-label { font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
   .metric-val { font-size: 24px; font-weight: 600; }
   .metric-val.green { color: #4caf50; }
   .metric-val.white { color: #fff; }
+
+  /* MANUAL MODE */
+  .manual-box { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .manual-box h3 { font-size: 13px; color: #aaa; margin-bottom: 12px; font-weight: 500; }
+  .drop-area { border: 2px dashed #3a3a4e; border-radius: 10px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px; }
+  .drop-area:hover, .drop-area.dragover { border-color: #4caf50; background: #1a3d1a22; }
+  .drop-area p { font-size: 13px; color: #666; margin-bottom: 8px; }
+  .drop-area span { font-size: 11px; color: #444; }
+  .drop-area.loaded { border-color: #4caf5066; background: #1a3d1a22; }
+  .drop-area.loaded p { color: #4caf50; }
+  .manual-actions { display: flex; gap: 8px; }
+  .btn-sm { font-size: 12px; padding: 7px 14px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
+  .btn-sm:hover { background: #2a2a3e; color: #fff; }
+  .btn-sm.primary { background: #1a3d1a; color: #4caf50; border-color: #4caf5044; }
+  .btn-sm.primary:hover { background: #245224; }
+
+  /* SECTION */
   .section-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
-  .bet-card { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .bet-card.ev-plus { border-left: 3px solid #4caf50; }
-  .bet-card.ev-minus { border-left: 3px solid #e53935; }
-  .bet-card.neutral { border-left: 3px solid #666; }
-  .bet-left { flex: 1; min-width: 0; }
-  .bet-header { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
-  .bet-player { font-size: 15px; font-weight: 600; color: #fff; }
-  .bet-market { font-size: 12px; color: #aaa; background: #2a2a3e; padding: 2px 8px; border-radius: 10px; }
-  .bet-game { font-size: 11px; color: #666; margin: 4px 0 10px; }
-  .bet-stats { display: flex; gap: 20px; flex-wrap: wrap; }
-  .stat { display: flex; flex-direction: column; gap: 2px; }
-  .stat-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.04em; }
-  .stat-val { font-size: 13px; color: #ccc; }
-  .bet-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
-  .signal { font-size: 22px; }
-  .ev-badge { font-size: 13px; font-weight: 600; padding: 4px 12px; border-radius: 20px; }
-  .ev-badge.pos { background: #1a3d1a; color: #4caf50; border: 1px solid #4caf5044; }
-  .ev-badge.neg { background: #3d1a1a; color: #e53935; border: 1px solid #e5393544; }
-  .ev-badge.neu { background: #2a2a2a; color: #888; border: 1px solid #44444444; }
-  .odd-val { font-size: 14px; font-weight: 600; color: #fff; }
-  .kelly { font-size: 11px; color: #888; }
+
+  /* PLAYER CARD */
+  .player-card { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
+  .player-card.has-ev { border-left: 3px solid #4caf50; }
+  .player-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .player-name { font-size: 15px; font-weight: 600; color: #fff; }
+  .player-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .market-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #2a2a3e; color: #aaa; }
+  .last5 { font-size: 11px; color: #666; }
+  .last5 span.hit { color: #4caf50; font-weight: 600; }
+
+  /* LINES TABLE */
+  .lines { display: flex; flex-wrap: wrap; gap: 8px; }
+  .line-card { background: #0f0f13; border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 14px; min-width: 110px; flex: 1; }
+  .line-card.ev-plus { border-color: #4caf5066; background: #1a3d1a22; }
+  .line-card.ev-minus { border-color: #e5393533; }
+  .line-label { font-size: 11px; color: #666; margin-bottom: 4px; }
+  .line-odd { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .line-stats { display: flex; flex-direction: column; gap: 3px; }
+  .line-stat { display: flex; justify-content: space-between; font-size: 11px; }
+  .line-stat-label { color: #555; }
+  .line-stat-val { color: #aaa; }
+  .line-stat-val.pos { color: #4caf50; font-weight: 600; }
+  .line-stat-val.neg { color: #e53935; }
+  .ev-signal { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-top: 5px; display: inline-block; }
+  .ev-signal.pos { background: #1a3d1a; color: #4caf50; border: 1px solid #4caf5044; }
+  .ev-signal.neg { background: #3d1a1a; color: #e53935; border: 1px solid #e5393544; }
+  .ev-signal.neu { background: #2a2a2a; color: #666; border: 1px solid #33333344; }
+
+  /* FOOTER */
   .footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; gap: 8px; }
   .footer-txt { font-size: 11px; color: #555; }
-  .req-info { font-size: 11px; color: #4caf50; }
   .refresh-btn { font-size: 13px; padding: 8px 18px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; }
   .refresh-btn:hover { background: #2a2a3e; color: #fff; }
+
+  /* LOADING / EMPTY */
   .loading { text-align: center; padding: 40px; color: #666; font-size: 14px; }
   .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; border-top-color: #4caf50; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; line-height: 1.8; }
-  @media (max-width: 600px) { .metrics { grid-template-columns: repeat(2, 1fr); } .bet-card { flex-direction: column; align-items: flex-start; } .bet-right { flex-direction: row; flex-wrap: wrap; } }
+
+  /* LIVE MODE extras */
+  .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
+  .req-info { font-size: 11px; color: #4caf50; }
+
+  @media (max-width: 600px) {
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .line-card { min-width: 90px; }
+  }
 </style>
 </head>
 <body>
+
 <div class="topbar">
-  <div class="logo"><div class="logo-dot"></div>EV+ NBA Scanner<span class="live-badge">AO VIVO</span></div>
+  <div class="logo">
+    <div class="logo-dot"></div>
+    EV+ NBA Scanner
+    <span class="live-badge" id="live-badge">AO VIVO</span>
+  </div>
+  <div class="mode-tabs">
+    <button class="mode-tab active" onclick="setMode('manual', this)">📋 Manual (Bet365)</button>
+    <button class="mode-tab" onclick="setMode('live', this)">🌐 Live (Odds API)</button>
+  </div>
   <div class="filters">
     <button class="filter-btn active" onclick="setFilter('todos',this)">Todos</button>
     <button class="filter-btn" onclick="setFilter('pos',this)">Só EV+</button>
@@ -67,218 +122,466 @@
     <button class="filter-btn" onclick="setFilter('ast',this)">Assistências</button>
   </div>
 </div>
+
 <div class="container">
   <div class="metrics">
     <div class="metric"><div class="metric-label">EV+ encontrados</div><div class="metric-val green" id="cnt-pos">—</div></div>
     <div class="metric"><div class="metric-label">Melhor EV+</div><div class="metric-val green" id="best-ev">—</div></div>
     <div class="metric"><div class="metric-label">Props analisados</div><div class="metric-val white" id="cnt-total">—</div></div>
-    <div class="metric"><div class="metric-label">Atualizado</div><div class="metric-val white" style="font-size:16px;" id="last-update">—</div></div>
+    <div class="metric"><div class="metric-label">Atualizado</div><div class="metric-val white" style="font-size:16px" id="last-update">—</div></div>
   </div>
-  <div class="section-title">player props de hoje — NBA</div>
-  <div id="bet-list"><div class="loading"><span class="spinner"></span>Buscando odds reais...</div></div>
-  <div class="footer">
-    <span class="footer-txt">The Odds API • Pinnacle + DraftKings + FanDuel • by Binows</span>
-    <span class="req-info" id="req-info"></span>
-    <button class="refresh-btn" id="refresh-btn" onclick="loadData()">Atualizar</button>
+
+  <!-- MANUAL MODE UI -->
+  <div id="manual-ui">
+    <div class="manual-box">
+      <h3>Cole o JSON exportado pela extensão Bet365 Props Scraper</h3>
+      <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="handleDrop(event)">
+        <p id="drop-label">Clique aqui ou arraste o arquivo .json</p>
+        <span>Exportado pela extensão Firefox · Bet365 Props Scraper</span>
+      </div>
+      <input type="file" id="file-input" accept=".json" style="display:none" onchange="handleFile(this.files[0])">
+      <div class="manual-actions">
+        <button class="btn-sm primary" onclick="document.getElementById('file-input').click()">📂 Abrir arquivo</button>
+        <button class="btn-sm" onclick="pasteJSON()">📋 Colar JSON</button>
+        <button class="btn-sm" onclick="clearData()">✕ Limpar</button>
+      </div>
+    </div>
+    <div class="section-title" id="manual-section-title" style="display:none">player props — bet365</div>
+    <div id="manual-list"></div>
+  </div>
+
+  <!-- LIVE MODE UI -->
+  <div id="live-ui" style="display:none">
+    <div class="section-title">player props de hoje — NBA</div>
+    <div id="bet-list"><div class="empty">Clique em "Atualizar" para buscar odds ao vivo.</div></div>
+    <div class="footer">
+      <span class="footer-txt">The Odds API · Pinnacle + DraftKings + FanDuel · by Binows</span>
+      <span class="req-info" id="req-info"></span>
+      <button class="refresh-btn" id="refresh-btn" onclick="loadLiveData()">Atualizar</button>
+    </div>
   </div>
 </div>
-<script>
-const KEY = 'a66ec6d8e3911951e9c061e0243445db';
-const BASE = 'https://api.the-odds-api.com/v4';
-const SPORT = 'basketball_nba';
-const MARKETS = 'player_points,player_rebounds,player_assists';
-const BOOKS = 'pinnacle,draftkings,fanduel';
-const MKT_LABEL = { player_points:'pontos', player_rebounds:'rebotes', player_assists:'assistências' };
-const MKT_TYPE = { player_points:'pts', player_rebounds:'reb', player_assists:'ast' };
 
-let allBets = [];
-let activeFilter = 'todos';
+<script>
+// ─────────────────────────────────────────────
+// GLOBALS
+// ─────────────────────────────────────────────
+let currentMode   = 'manual';
+let activeFilter  = 'todos';
+let manualData    = null;  // dados do JSON da extensão
+let allLiveBets   = [];
+
+// ─────────────────────────────────────────────
+// MODE SWITCH
+// ─────────────────────────────────────────────
+function setMode(mode, el) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('manual-ui').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('live-ui').style.display   = mode === 'live'   ? 'block' : 'none';
+  document.getElementById('live-badge').style.display = mode === 'live'  ? 'inline' : 'none';
+  resetMetrics();
+  if (mode === 'manual' && manualData) renderManual();
+}
+
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (currentMode === 'manual' && manualData) renderManual();
+  else if (currentMode === 'live') renderLive();
+}
+
+function resetMetrics() {
+  ['cnt-pos','best-ev','cnt-total','last-update'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+}
+
+// ─────────────────────────────────────────────
+// POISSON
+// ─────────────────────────────────────────────
+function poissonCDF(lambda, k) {
+  // P(X > k) = 1 - P(X <= k)
+  let prob = 0, term = Math.exp(-lambda);
+  for (let i = 0; i <= k; i++) {
+    prob += term;
+    term *= lambda / (i + 1);
+  }
+  return Math.max(0, Math.min(1, 1 - prob));
+}
+
+// Calibra lambda usando duas odds conhecidas (bissecção)
+function calibrateLambda(p_a, k_a, p_b, k_b) {
+  function bisect(targetP, k) {
+    let lo = 0.1, hi = 60;
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2;
+      poissonCDF(mid, k) > targetP ? hi = mid : lo = mid;
+    }
+    return (lo + hi) / 2;
+  }
+  const la = bisect(p_a, k_a);
+  const lb = bisect(p_b, k_b);
+  return (la + lb) / 2;
+}
+
+// Margem típica da Bet365 em props (~7%)
+const BET365_MARGIN = 1.07;
+
+function fairProb(odd) {
+  return (1 / odd) / BET365_MARGIN;
+}
+
+function calcEV(prob, odd) {
+  return parseFloat(((prob * odd - 1) * 100).toFixed(1));
+}
+
+function calcKelly(prob, odd) {
+  if (odd <= 1) return 0;
+  return parseFloat((Math.max(0, (prob * odd - 1) / (odd - 1)) * 50).toFixed(1)); // meio Kelly
+}
+
+// ─────────────────────────────────────────────
+// MANUAL MODE — FILE HANDLING
+// ─────────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-area').classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+}
+
+function handleFile(file) {
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => processJSON(e.target.result, file.name);
+  reader.readAsText(file);
+}
+
+function pasteJSON() {
+  const txt = prompt('Cole o JSON aqui:');
+  if (txt) processJSON(txt, 'colado');
+}
+
+function clearData() {
+  manualData = null;
+  document.getElementById('drop-area').classList.remove('loaded');
+  document.getElementById('drop-label').textContent = 'Clique aqui ou arraste o arquivo .json';
+  document.getElementById('manual-list').innerHTML = '';
+  document.getElementById('manual-section-title').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  resetMetrics();
+}
+
+function processJSON(text, filename) {
+  try {
+    const data = JSON.parse(text);
+    if (!data.players || !Array.isArray(data.players)) throw new Error('JSON inválido — campo "players" não encontrado.');
+    manualData = data;
+    document.getElementById('drop-area').classList.add('loaded');
+    document.getElementById('drop-label').textContent = '✓ ' + filename + ' · ' + data.players.length + ' jogadores';
+    renderManual();
+  } catch(e) {
+    alert('Erro ao ler JSON: ' + e.message);
+  }
+}
+
+// ─────────────────────────────────────────────
+// MANUAL MODE — RENDER
+// ─────────────────────────────────────────────
+function renderManual() {
+  if (!manualData) return;
+
+  const marketFilter = { pts: 'pontos', reb: 'rebotes', ast: 'assistências' };
+  const mkt = manualData.market || 'desconhecido';
+
+  // Filtra jogadores pelo mercado selecionado
+  let players = manualData.players;
+  if (activeFilter === 'pos') {
+    // Filtra só quem tem pelo menos uma linha EV+
+    players = players.filter(p => hasEVPlus(p));
+  } else if (['pts','reb','ast'].includes(activeFilter)) {
+    // Filtra pelo mercado do JSON
+    if (marketFilter[activeFilter] !== mkt && mkt !== 'desconhecido') {
+      players = [];
+    }
+  }
+
+  const list = document.getElementById('manual-list');
+  const titleEl = document.getElementById('manual-section-title');
+
+  if (players.length === 0) {
+    list.innerHTML = '<div class="empty">Nenhum resultado para este filtro.</div>';
+    titleEl.style.display = 'none';
+    updateMetrics([], 0);
+    return;
+  }
+
+  titleEl.style.display = 'block';
+  titleEl.textContent = 'player props — ' + mkt;
+
+  // Para cada jogador, processa as linhas com Poisson
+  const allCards = [];
+  let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
+
+  const html = players.map(p => {
+    const linesEntries = Object.entries(p.lines || {});
+    if (linesEntries.length < 2) return '';
+
+    // Calibra lambda com as duas linhas com odds mais distantes
+    const sorted = linesEntries
+      .map(([label, odd]) => ({ label, odd, k: parseInt(label) - 1 }))
+      .filter(x => !isNaN(x.k) && x.odd >= 1.01)
+      .sort((a, b) => a.k - b.k);
+
+    let lambda = null;
+    if (sorted.length >= 2) {
+      const first = sorted[0];
+      const last  = sorted[sorted.length - 1];
+      const pFirst = fairProb(first.odd);
+      const pLast  = fairProb(last.odd);
+      try { lambda = calibrateLambda(pFirst, first.k, pLast, last.k); } catch(e) {}
+    }
+
+    // Últimos 5 jogos
+    const last5 = p.last5 || [];
+
+    // Gera cards de linha
+    let playerHasEV = false;
+    const lineCards = sorted.map(({ label, odd, k }) => {
+      let prob, ev, kelly;
+
+      if (lambda !== null) {
+        prob  = poissonCDF(lambda, k);
+        ev    = calcEV(prob, odd);
+        kelly = calcKelly(prob, odd);
+      } else {
+        prob  = fairProb(odd);
+        ev    = 0;
+        kelly = 0;
+      }
+
+      totalLines++;
+      if (ev > 3) { evPlusCount++; playerHasEV = true; }
+      if (ev > bestEV) bestEV = ev;
+
+      const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
+      const sigCls = ev > 3 ? 'pos'     : ev < -3 ? 'neg'      : 'neu';
+      const sigTxt = ev > 3 ? 'EV+'     : ev < -3 ? 'EV−'      : 'neutro';
+
+      // Hit rate nos últimos 5
+      const lineNum  = parseInt(label);
+      const hitCount = last5.filter(x => x >= lineNum).length;
+      const hitRate  = last5.length > 0 ? Math.round(hitCount / last5.length * 100) : null;
+
+      return `
+        <div class="line-card ${cls}">
+          <div class="line-label">${label} rebotes</div>
+          <div class="line-odd">${odd.toFixed(2)}</div>
+          <div class="line-stats">
+            <div class="line-stat">
+              <span class="line-stat-label">Prob. fair</span>
+              <span class="line-stat-val">${(prob * 100).toFixed(1)}%</span>
+            </div>
+            <div class="line-stat">
+              <span class="line-stat-label">EV</span>
+              <span class="line-stat-val ${sigCls}">${ev > 0 ? '+' : ''}${ev}%</span>
+            </div>
+            <div class="line-stat">
+              <span class="line-stat-label">% da banca</span>
+              <span class="line-stat-val ${kelly > 0 ? 'pos' : ''}">${kelly > 0 ? kelly.toFixed(1) + '%' : '—'}</span>
+            </div>
+            ${hitRate !== null ? `
+            <div class="line-stat">
+              <span class="line-stat-label">Últimos 5</span>
+              <span class="line-stat-val">${hitCount}/5 (${hitRate}%)</span>
+            </div>` : ''}
+          </div>
+          <span class="ev-signal ${sigCls}">${sigTxt}</span>
+        </div>`;
+    }).join('');
+
+    // Formata últimos 5 com highlight
+    const last5html = last5.map(x => {
+      const lineNums = sorted.map(s => parseInt(s.label));
+      const min = lineNums.length > 0 ? Math.min(...lineNums) : 999;
+      return `<span${x >= min ? ' class="hit"' : ''}>${x}</span>`;
+    }).join(' ');
+
+    allCards.push({ playerHasEV });
+
+    return `
+      <div class="player-card${playerHasEV ? ' has-ev' : ''}">
+        <div class="player-header">
+          <div class="player-name">${p.player}</div>
+          <div class="player-meta">
+            <span class="market-badge">${mkt}</span>
+            ${last5.length > 0 ? `<span class="last5">Últ. 5: ${last5html}</span>` : ''}
+            ${lambda !== null ? `<span class="last5" style="color:#555">λ=${lambda.toFixed(2)}</span>` : ''}
+          </div>
+        </div>
+        <div class="lines">${lineCards}</div>
+      </div>`;
+  }).join('');
+
+  list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
+
+  // Métricas
+  document.getElementById('cnt-pos').textContent   = evPlusCount;
+  document.getElementById('cnt-total').textContent  = totalLines;
+  document.getElementById('best-ev').textContent    = bestEV > -Infinity && bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+  document.getElementById('last-update').textContent = new Date(manualData.scrapedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function hasEVPlus(p) {
+  const sorted = Object.entries(p.lines || {})
+    .map(([label, odd]) => ({ odd, k: parseInt(label) - 1 }))
+    .filter(x => !isNaN(x.k) && x.odd >= 1.01)
+    .sort((a, b) => a.k - b.k);
+  if (sorted.length < 2) return false;
+  const first = sorted[0], last = sorted[sorted.length - 1];
+  let lambda;
+  try {
+    lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k);
+  } catch(e) { return false; }
+  return sorted.some(({ odd, k }) => calcEV(poissonCDF(lambda, k), odd) > 3);
+}
+
+function updateMetrics(bets, total) {
+  const pos = bets.filter(b => b.ev > 2);
+  document.getElementById('cnt-pos').textContent   = pos.length;
+  document.getElementById('cnt-total').textContent  = total;
+  const best = pos.length > 0 ? Math.max(...pos.map(b => b.ev)) : 0;
+  document.getElementById('best-ev').textContent    = best > 0 ? '+' + best.toFixed(1) + '%' : '—';
+}
+
+// ─────────────────────────────────────────────
+// LIVE MODE (Odds API — mantido do original)
+// ─────────────────────────────────────────────
+const KEY     = 'a66ec6d8e3911951e9c061e0243445db';
+const BASE    = 'https://api.the-odds-api.com/v4';
+const SPORT   = 'basketball_nba';
+const MARKETS = 'player_points,player_rebounds,player_assists';
+const BOOKS   = 'pinnacle,draftkings,fanduel';
+const MKT_LABEL = { player_points:'pontos', player_rebounds:'rebotes', player_assists:'assistências' };
+const MKT_TYPE  = { player_points:'pts',    player_rebounds:'reb',     player_assists:'ast' };
 
 function toDecimal(o) {
   return o > 0 ? parseFloat((o/100+1).toFixed(3)) : parseFloat((100/Math.abs(o)+1).toFixed(3));
 }
-function calcEV(p, o) { return parseFloat(((p/100*o-1)*100).toFixed(1)); }
-function calcKelly(p, o) { return parseFloat((Math.max(0,(p/100*o-1)/(o-1)*100)).toFixed(1)); }
 function getFairProb(oddsArr) {
-  const total = oddsArr.reduce((s,o) => s+1/o, 0);
-  const probs = oddsArr.map(o => (1/o)/total*100);
-  return parseFloat((probs.reduce((s,p)=>s+p,0)/probs.length).toFixed(1));
+  const total = oddsArr.reduce((s, o) => s + 1/o, 0);
+  return parseFloat((oddsArr.map(o => (1/o)/total*100).reduce((s,p)=>s+p,0)/oddsArr.length).toFixed(1));
 }
-function updateClock() {
-  const t = new Date();
-  document.getElementById('last-update').textContent = String(t.getHours()).padStart(2,'0') + ':' + String(t.getMinutes()).padStart(2,'0');
-}
+function livEV(p, o)     { return parseFloat(((p/100*o-1)*100).toFixed(1)); }
+function livKelly(p, o)  { return parseFloat((Math.max(0,(p/100*o-1)/(o-1)*100/2)).toFixed(1)); }
 
-async function loadData() {
+async function loadLiveData() {
   const btn = document.getElementById('refresh-btn');
-  btn.textContent = 'Atualizando...';
-  btn.disabled = true;
-  document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando jogos de hoje...</div>';
+  btn.textContent = 'Atualizando...'; btn.disabled = true;
+  document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando jogos...</div>';
 
   try {
     const evRes = await fetch(BASE + '/sports/' + SPORT + '/events?apiKey=' + KEY);
-    if (!evRes.ok) throw new Error('Erro ' + evRes.status + ' ao buscar eventos');
+    if (!evRes.ok) throw new Error('Erro ' + evRes.status);
     const events = await evRes.json();
-
     if (!Array.isArray(events) || events.length === 0) {
-      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo encontrado.<br>Tente mais tarde.</div>';
-      btn.textContent = 'Atualizar'; btn.disabled = false;
-      return;
+      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo encontrado.</div>';
+      btn.textContent = 'Atualizar'; btn.disabled = false; return;
     }
-
     const agora = new Date();
-    const hojeStr = agora.toISOString().split('T')[0];
-
-    let jogos = events.filter(function(e) {
-      var t = new Date(e.commence_time);
-      return e.commence_time.startsWith(hojeStr) && t > agora;
-    });
-
+    let jogos = events.filter(e => new Date(e.commence_time) > agora).slice(0, 4);
     if (jogos.length === 0) {
-      jogos = events.filter(function(e) {
-        return new Date(e.commence_time) > agora;
-      }).slice(0, 4);
+      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo futuro hoje.</div>';
+      btn.textContent = 'Atualizar'; btn.disabled = false; return;
     }
-
-    if (jogos.length === 0) {
-      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo futuro encontrado hoje.</div>';
-      btn.textContent = 'Atualizar'; btn.disabled = false;
-      return;
-    }
-
-    var bets = [];
-
-    for (var i = 0; i < Math.min(jogos.length, 4); i++) {
-      var ev = jogos[i];
-      document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando props: ' + ev.away_team + ' @ ' + ev.home_team + '...</div>';
-
-      var pRes = await fetch(BASE + '/sports/' + SPORT + '/events/' + ev.id + '/odds?apiKey=' + KEY + '&regions=us&markets=' + MARKETS + '&bookmakers=' + BOOKS + '&oddsFormat=american');
+    const bets = [];
+    for (const ev of jogos) {
+      document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>' + ev.away_team + ' @ ' + ev.home_team + '...</div>';
+      const pRes = await fetch(BASE + '/sports/' + SPORT + '/events/' + ev.id + '/odds?apiKey=' + KEY + '&regions=us&markets=' + MARKETS + '&bookmakers=' + BOOKS + '&oddsFormat=american');
       if (!pRes.ok) continue;
-
-      var rem = pRes.headers.get('x-requests-remaining');
+      const rem = pRes.headers.get('x-requests-remaining');
       if (rem) document.getElementById('req-info').textContent = rem + ' req restantes';
-
-      var pData = await pRes.json();
+      const pData = await pRes.json();
       if (!pData.bookmakers || pData.bookmakers.length === 0) continue;
-
-      var gameStr = ev.away_team + ' @ ' + ev.home_team;
-      var playerMap = {};
-
-      for (var b = 0; b < pData.bookmakers.length; b++) {
-        var book = pData.bookmakers[b];
-        for (var m = 0; m < book.markets.length; m++) {
-          var mkt = book.markets[m];
+      const gameStr = ev.away_team + ' @ ' + ev.home_team;
+      const playerMap = {};
+      for (const book of pData.bookmakers) {
+        for (const mkt of book.markets) {
           if (!MKT_LABEL[mkt.key]) continue;
-          for (var o = 0; o < mkt.outcomes.length; o++) {
-            var out = mkt.outcomes[o];
+          for (const out of mkt.outcomes) {
             if (out.name !== 'Over') continue;
-            var k = out.description + '||' + mkt.key + '||' + out.point;
-            if (!playerMap[k]) {
-              playerMap[k] = {
-                player: out.description,
-                label: MKT_LABEL[mkt.key],
-                type: MKT_TYPE[mkt.key],
-                line: out.point,
-                game: gameStr,
-                odds: [],
-                books: []
-              };
-            }
+            const k = out.description + '||' + mkt.key + '||' + out.point;
+            if (!playerMap[k]) playerMap[k] = { player: out.description, label: MKT_LABEL[mkt.key], type: MKT_TYPE[mkt.key], line: out.point, game: gameStr, odds: [], books: [] };
             playerMap[k].odds.push(toDecimal(out.price));
             playerMap[k].books.push(book.key);
           }
         }
       }
-
-      var keys = Object.keys(playerMap);
-      for (var ki = 0; ki < keys.length; ki++) {
-        var d = playerMap[keys[ki]];
+      for (const d of Object.values(playerMap)) {
         if (d.odds.length < 2) continue;
-        var bestOdd = Math.max.apply(null, d.odds);
-        var bestBook = d.books[d.odds.indexOf(bestOdd)];
-        var fp = getFairProb(d.odds);
-        var ev2 = calcEV(fp, bestOdd);
-        var kelly = calcKelly(fp, bestOdd);
-        bets.push({
-          player: d.player,
-          market: d.line + '+ ' + d.label,
-          type: d.type,
-          game: d.game,
-          prob: fp,
-          casaProb: Math.round(100/bestOdd),
-          odd: bestOdd,
-          book: bestBook,
-          kelly: kelly,
-          ev: ev2,
-          n: d.odds.length
-        });
+        const bestOdd  = Math.max(...d.odds);
+        const bestBook = d.books[d.odds.indexOf(bestOdd)];
+        const fp = getFairProb(d.odds);
+        bets.push({ player: d.player, market: d.line + '+ ' + d.label, type: d.type, game: d.game, prob: fp, casaProb: Math.round(100/bestOdd), odd: bestOdd, book: bestBook, kelly: livKelly(fp, bestOdd), ev: livEV(fp, bestOdd), n: d.odds.length });
       }
     }
-
-    allBets = bets.sort(function(a,b){ return b.ev - a.ev; });
-    var pos = allBets.filter(function(b){ return b.ev > 2; });
-    document.getElementById('cnt-pos').textContent = pos.length;
-    document.getElementById('cnt-total').textContent = allBets.length;
-    var bestEV = pos.length > 0 ? Math.max.apply(null, pos.map(function(b){ return b.ev; })) : 0;
-    document.getElementById('best-ev').textContent = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
-    updateClock();
-    render();
-
+    allLiveBets = bets.sort((a, b) => b.ev - a.ev);
+    const pos = allLiveBets.filter(b => b.ev > 2);
+    document.getElementById('cnt-pos').textContent  = pos.length;
+    document.getElementById('cnt-total').textContent = allLiveBets.length;
+    const bestEV = pos.length > 0 ? Math.max(...pos.map(b => b.ev)) : 0;
+    document.getElementById('best-ev').textContent  = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    renderLive();
   } catch(e) {
-    console.error(e);
-    document.getElementById('bet-list').innerHTML = '<div class="empty">Erro: ' + e.message + '<br>Abra o console (F12) para detalhes.</div>';
+    document.getElementById('bet-list').innerHTML = '<div class="empty">Erro: ' + e.message + '</div>';
   }
-
-  btn.textContent = 'Atualizar';
-  btn.disabled = false;
+  btn.textContent = 'Atualizar'; btn.disabled = false;
 }
 
-function setFilter(f, el) {
-  activeFilter = f;
-  document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('active'); });
-  el.classList.add('active');
-  render();
-}
-
-function render() {
-  var data = allBets;
-  if (activeFilter === 'pos') data = allBets.filter(function(b){ return b.ev > 2; });
-  if (activeFilter === 'pts') data = allBets.filter(function(b){ return b.type === 'pts'; });
-  if (activeFilter === 'reb') data = allBets.filter(function(b){ return b.type === 'reb'; });
-  if (activeFilter === 'ast') data = allBets.filter(function(b){ return b.type === 'ast'; });
-
-  if (data.length === 0) {
-    document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhuma aposta encontrada.</div>';
-    return;
-  }
-
-  document.getElementById('bet-list').innerHTML = data.map(function(b) {
-    var cc, sig, bc, bt;
-    if (b.ev > 2) { cc='ev-plus'; sig='🟢'; bc='pos'; bt='+'+b.ev+'%'; }
-    else if (b.ev < -2) { cc='ev-minus'; sig='🔴'; bc='neg'; bt=b.ev+'%'; }
-    else { cc='neutral'; sig='⬜'; bc='neu'; bt='neutro'; }
-    return '<div class="bet-card ' + cc + '">' +
-      '<div class="bet-left">' +
-        '<div class="bet-header"><span class="bet-player">' + b.player + '</span><span class="bet-market">' + b.market + '</span></div>' +
-        '<div class="bet-game">' + b.game + '</div>' +
-        '<div class="bet-stats">' +
-          '<div class="stat"><span class="stat-label">prob. fair</span><span class="stat-val">' + b.prob + '%</span></div>' +
-          '<div class="stat"><span class="stat-label">prob. casa</span><span class="stat-val">' + b.casaProb + '%</span></div>' +
-          '<div class="stat"><span class="stat-label">casas</span><span class="stat-val">' + b.n + '</span></div>' +
-          '<div class="stat"><span class="stat-label">melhor em</span><span class="stat-val">' + b.book + '</span></div>' +
-        '</div>' +
-      '</div>' +
-      '<div class="bet-right">' +
-        '<span class="signal">' + sig + '</span>' +
-        '<span class="ev-badge ' + bc + '">EV ' + bt + '</span>' +
-        '<span class="odd-val">odd ' + b.odd.toFixed(2) + '</span>' +
-        (b.kelly > 0 ? '<span class="kelly">Kelly: ' + b.kelly + '% banca</span>' : '') +
-      '</div>' +
-    '</div>';
+function renderLive() {
+  let data = allLiveBets;
+  if (activeFilter === 'pos') data = data.filter(b => b.ev > 2);
+  if (activeFilter === 'pts') data = data.filter(b => b.type === 'pts');
+  if (activeFilter === 'reb') data = data.filter(b => b.type === 'reb');
+  if (activeFilter === 'ast') data = data.filter(b => b.type === 'ast');
+  if (data.length === 0) { document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhuma aposta encontrada.</div>'; return; }
+  document.getElementById('bet-list').innerHTML = data.map(b => {
+    const cc = b.ev > 2 ? 'ev-plus' : b.ev < -2 ? 'ev-minus' : 'neutral';
+    const sig = b.ev > 2 ? '🟢' : b.ev < -2 ? '🔴' : '⬜';
+    const bc = b.ev > 2 ? 'pos' : b.ev < -2 ? 'neg' : 'neu';
+    const bt = b.ev > 2 ? '+'+b.ev+'%' : b.ev < -2 ? b.ev+'%' : 'neutro';
+    return `<div class="player-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-left:3px solid ${b.ev>2?'#4caf50':b.ev<-2?'#e53935':'#666'}">
+      <div style="flex:1;min-width:0">
+        <div class="player-header" style="margin-bottom:8px">
+          <span class="player-name">${b.player}</span>
+          <span class="market-badge">${b.market}</span>
+        </div>
+        <div style="font-size:11px;color:#555;margin-bottom:8px">${b.game}</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">prob. fair</span><span class="line-stat-val">${b.prob}%</span></div>
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">casas</span><span class="line-stat-val">${b.n}</span></div>
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">melhor em</span><span class="line-stat-val">${b.book}</span></div>
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">% da banca</span><span class="line-stat-val ${b.kelly>0?'pos':''}">${b.kelly>0?b.kelly+'%':'—'}</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <span style="font-size:20px">${sig}</span>
+        <span class="ev-signal ${bc}">EV ${bt}</span>
+        <span style="font-size:14px;font-weight:600;color:#fff">odd ${b.odd.toFixed(2)}</span>
+      </div>
+    </div>`;
   }).join('');
 }
 
-loadData();
+// Init
+document.getElementById('live-badge').style.display = 'none';
 </script>
 </body>
 </html>
