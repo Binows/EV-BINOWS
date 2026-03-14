@@ -147,19 +147,19 @@
   <!-- MANUAL MODE UI -->
   <div id="manual-ui">
     <div class="manual-box">
-      <h3>Cole o JSON exportado pela extensão Bet365 Props Scraper</h3>
+      <h3>Importe os JSONs exportados pela extensão — vários de uma vez</h3>
       <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
            ondragover="event.preventDefault();this.classList.add('dragover')"
            ondragleave="this.classList.remove('dragover')"
            ondrop="handleDrop(event)">
-        <p id="drop-label">Clique aqui ou arraste o arquivo .json</p>
-        <span>Exportado pela extensão Firefox · Bet365 Props Scraper</span>
+        <p id="drop-label">Clique aqui ou arraste os arquivos .json</p>
+        <span>Selecione vários de uma vez — rebotes, pontos, assistências, múltiplos jogos</span>
       </div>
-      <input type="file" id="file-input" accept=".json" style="display:none" onchange="handleFile(this.files[0])">
+      <div id="file-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+      <input type="file" id="file-input" accept=".json" multiple style="display:none" onchange="handleFiles(this.files)">
       <div class="manual-actions">
-        <button class="btn-sm primary" onclick="document.getElementById('file-input').click()">📂 Abrir arquivo</button>
-        <button class="btn-sm" onclick="pasteJSON()">📋 Colar JSON</button>
-        <button class="btn-sm" onclick="clearData()">✕ Limpar</button>
+        <button class="btn-sm primary" onclick="document.getElementById('file-input').click()">📂 Abrir arquivos</button>
+        <button class="btn-sm" onclick="clearData()">✕ Limpar tudo</button>
       </div>
     </div>
     <!-- TOP EV+ RANKING -->
@@ -190,7 +190,7 @@
 // ─────────────────────────────────────────────
 let currentMode   = 'manual';
 let activeFilter  = 'todos';
-let manualData    = null;  // dados do JSON da extensão
+let allDatasets   = [];  // array de JSONs importados
 let allLiveBets   = [];
 
 // ─────────────────────────────────────────────
@@ -204,14 +204,14 @@ function setMode(mode, el) {
   document.getElementById('live-ui').style.display   = mode === 'live'   ? 'block' : 'none';
   document.getElementById('live-badge').style.display = mode === 'live'  ? 'inline' : 'none';
   resetMetrics();
-  if (mode === 'manual' && manualData) renderManual();
+  if (mode === 'manual' && allDatasets.length) renderManual();
 }
 
 function setFilter(f, el) {
   activeFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  if (currentMode === 'manual' && manualData) renderManual();
+  if (currentMode === 'manual' && allDatasets.length) renderManual();
   else if (currentMode === 'live') renderLive();
 }
 
@@ -268,92 +268,132 @@ function calcKelly(prob, odd) {
 // ─────────────────────────────────────────────
 // MANUAL MODE — FILE HANDLING
 // ─────────────────────────────────────────────
+const MKT_NAMES = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', desconhecido: '?' };
+const MKT_FILTER = { reb: 'rebotes', pts: 'pontos', ast: 'assistências' };
+
 function handleDrop(e) {
   e.preventDefault();
   document.getElementById('drop-area').classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file) handleFile(file);
+  handleFiles(e.dataTransfer.files);
 }
 
-function handleFile(file) {
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = e => processJSON(e.target.result, file.name);
-  reader.readAsText(file);
+function handleFiles(files) {
+  if (!files || files.length === 0) return;
+  let loaded = 0;
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.players || !Array.isArray(data.players)) return;
+        // Evita duplicatas pelo nome do arquivo + timestamp
+        const id = file.name + '_' + (data.scrapedAt || '');
+        if (!allDatasets.find(d => d._id === id)) {
+          data._id       = id;
+          data._filename = file.name;
+          // Detecta mercado pelo nome do arquivo se não veio no JSON
+          if (!data.market || data.market === 'desconhecido') {
+            const fn = file.name.toLowerCase();
+            if (fn.includes('reb') || fn.includes('rebote'))       data.market = 'rebotes';
+            else if (fn.includes('ast') || fn.includes('assist'))   data.market = 'assistências';
+            else if (fn.includes('pts') || fn.includes('pont'))     data.market = 'pontos';
+          }
+          allDatasets.push(data);
+        }
+        loaded++;
+        if (loaded === files.length) {
+          updateChips();
+          renderManual();
+        }
+      } catch(e) { console.warn('Erro ao ler', file.name, e); }
+    };
+    reader.readAsText(file);
+  }
 }
 
-function pasteJSON() {
-  const txt = prompt('Cole o JSON aqui:');
-  if (txt) processJSON(txt, 'colado');
+function updateChips() {
+  const chips = document.getElementById('file-chips');
+  const drop  = document.getElementById('drop-area');
+  if (allDatasets.length === 0) {
+    chips.innerHTML = '';
+    drop.classList.remove('loaded');
+    document.getElementById('drop-label').textContent = 'Clique aqui ou arraste os arquivos .json';
+    return;
+  }
+  drop.classList.add('loaded');
+  document.getElementById('drop-label').textContent = allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '') + ' carregado' + (allDatasets.length > 1 ? 's' : '');
+  chips.innerHTML = allDatasets.map((d, i) => {
+    const mkt   = MKT_NAMES[d.market] || '?';
+    const count = d.players.length;
+    return `<span style="display:inline-flex;align-items:center;gap:5px;background:#2a2a3e;border:1px solid #3a3a4e;border-radius:20px;padding:3px 10px;font-size:11px;color:#aaa">
+      <span style="color:#4caf50;font-weight:600">${mkt}</span> ${count}j
+      <span onclick="removeDataset(${i})" style="cursor:pointer;color:#555;margin-left:2px">✕</span>
+    </span>`;
+  }).join('');
+}
+
+function removeDataset(i) {
+  allDatasets.splice(i, 1);
+  updateChips();
+  if (allDatasets.length) renderManual();
+  else { document.getElementById('manual-list').innerHTML = ''; document.getElementById('manual-section-title').style.display = 'none'; document.getElementById('top-ev-box').style.display = 'none'; resetMetrics(); }
 }
 
 function clearData() {
-  manualData = null;
-  document.getElementById('drop-area').classList.remove('loaded');
-  document.getElementById('drop-label').textContent = 'Clique aqui ou arraste o arquivo .json';
+  allDatasets = [];
+  updateChips();
   document.getElementById('manual-list').innerHTML = '';
   document.getElementById('manual-section-title').style.display = 'none';
+  document.getElementById('top-ev-box').style.display = 'none';
   document.getElementById('file-input').value = '';
   resetMetrics();
-}
-
-function processJSON(text, filename) {
-  try {
-    const data = JSON.parse(text);
-    if (!data.players || !Array.isArray(data.players)) throw new Error('JSON inválido — campo "players" não encontrado.');
-    manualData = data;
-    document.getElementById('drop-area').classList.add('loaded');
-    document.getElementById('drop-label').textContent = '✓ ' + filename + ' · ' + data.players.length + ' jogadores';
-    renderManual();
-  } catch(e) {
-    alert('Erro ao ler JSON: ' + e.message);
-  }
 }
 
 // ─────────────────────────────────────────────
 // MANUAL MODE — RENDER
 // ─────────────────────────────────────────────
 function renderManual() {
-  if (!manualData) return;
+  if (!allDatasets.length) return;
 
-  const marketFilter = { pts: 'pontos', reb: 'rebotes', ast: 'assistências' };
-  const mkt = manualData.market || 'desconhecido';
-
-  // Filtra jogadores pelo mercado selecionado
-  let players = manualData.players;
-  if (activeFilter === 'pos') {
-    // Filtra só quem tem pelo menos uma linha EV+
-    players = players.filter(p => hasEVPlus(p));
-  } else if (['pts','reb','ast'].includes(activeFilter)) {
-    // Filtra pelo mercado do JSON
-    if (marketFilter[activeFilter] !== mkt && mkt !== 'desconhecido') {
-      players = [];
+  // Mescla todos os datasets num array plano de {player, market, lines, last5}
+  let allPlayers = [];
+  let latestScrapedAt = null;
+  for (const ds of allDatasets) {
+    const mkt = ds.market || 'desconhecido';
+    for (const p of ds.players) {
+      allPlayers.push({ ...p, market: mkt });
     }
+    if (!latestScrapedAt || ds.scrapedAt > latestScrapedAt) latestScrapedAt = ds.scrapedAt;
   }
 
-  const list = document.getElementById('manual-list');
+  // Aplica filtro de mercado
+  if (activeFilter === 'reb') allPlayers = allPlayers.filter(p => p.market === 'rebotes');
+  else if (activeFilter === 'pts') allPlayers = allPlayers.filter(p => p.market === 'pontos');
+  else if (activeFilter === 'ast') allPlayers = allPlayers.filter(p => p.market === 'assistências');
+  else if (activeFilter === 'pos') allPlayers = allPlayers.filter(p => hasEVPlus(p));
+
+  const list    = document.getElementById('manual-list');
   const titleEl = document.getElementById('manual-section-title');
 
-  if (players.length === 0) {
+  if (allPlayers.length === 0) {
     list.innerHTML = '<div class="empty">Nenhum resultado para este filtro.</div>';
     titleEl.style.display = 'none';
-    updateMetrics([], 0);
+    document.getElementById('top-ev-box').style.display = 'none';
     return;
   }
 
   titleEl.style.display = 'block';
-  titleEl.textContent = 'player props — ' + mkt;
+  titleEl.textContent   = 'player props — ' + allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '');
 
-  // Para cada jogador, processa as linhas com Poisson
-  const allCards = [];
   let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
   const topEVItems = [];
 
-  const html = players.map(p => {
+  const html = allPlayers.map(p => {
+    const mkt         = p.market || 'desconhecido';
+    const mktLabel    = MKT_NAMES[mkt] || mkt;
     const linesEntries = Object.entries(p.lines || {});
     if (linesEntries.length < 2) return '';
 
-    // Calibra lambda com as duas linhas com odds mais distantes
     const sorted = linesEntries
       .map(([label, odd]) => ({ label, odd, k: parseInt(label) - 1 }))
       .filter(x => !isNaN(x.k) && x.odd >= 1.01)
@@ -361,95 +401,63 @@ function renderManual() {
 
     let lambda = null;
     if (sorted.length >= 2) {
-      const first = sorted[0];
-      const last  = sorted[sorted.length - 1];
-      const pFirst = fairProb(first.odd);
-      const pLast  = fairProb(last.odd);
-      try { lambda = calibrateLambda(pFirst, first.k, pLast, last.k); } catch(e) {}
+      const first = sorted[0], last = sorted[sorted.length - 1];
+      try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); } catch(e) {}
     }
 
-    // Últimos 5 jogos
     const last5 = p.last5 || [];
-
-    // Gera cards de linha
     let playerHasEV = false;
-    const lineCards = sorted.map(({ label, odd, k }) => {
-      let prob, ev, kelly;
 
+    const lineCards = sorted.map(({ label, odd, k }) => {
+      let prob = fairProb(odd), ev = 0, kelly = 0;
       if (lambda !== null) {
         prob  = poissonCDF(lambda, k);
         ev    = calcEV(prob, odd);
         kelly = calcKelly(prob, odd);
-      } else {
-        prob  = fairProb(odd);
-        ev    = 0;
-        kelly = 0;
       }
-
       totalLines++;
       if (ev > 3) {
         evPlusCount++; playerHasEV = true;
-        topEVItems.push({ player: p.player, label, odd, ev, kelly, lineNum: parseInt(label), last5 });
+        topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), last5 });
       }
       if (ev > bestEV) bestEV = ev;
 
       const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
       const sigCls = ev > 3 ? 'pos'     : ev < -3 ? 'neg'      : 'neu';
       const sigTxt = ev > 3 ? 'EV+'     : ev < -3 ? 'EV−'      : 'neutro';
-
-      // Hit rate nos últimos 5
       const lineNum  = parseInt(label);
       const hitCount = last5.filter(x => x >= lineNum).length;
       const hitRate  = last5.length > 0 ? Math.round(hitCount / last5.length * 100) : null;
 
-      return `
-        <div class="line-card ${cls}">
-          <div class="line-label">${label} rebotes</div>
-          <div class="line-odd">${odd.toFixed(2)}</div>
-          <div class="line-stats">
-            <div class="line-stat">
-              <span class="line-stat-label">Prob. fair</span>
-              <span class="line-stat-val">${(prob * 100).toFixed(1)}%</span>
-            </div>
-            <div class="line-stat">
-              <span class="line-stat-label">EV</span>
-              <span class="line-stat-val ${sigCls}">${ev > 0 ? '+' : ''}${ev}%</span>
-            </div>
-            <div class="line-stat">
-              <span class="line-stat-label">% da banca</span>
-              <span class="line-stat-val ${kelly > 0 ? 'pos' : ''}">${kelly > 0 ? kelly.toFixed(1) + '%' : '—'}</span>
-            </div>
-            ${hitRate !== null ? `
-            <div class="line-stat">
-              <span class="line-stat-label">Últimos 5</span>
-              <span class="line-stat-val">${hitCount}/5 (${hitRate}%)</span>
-            </div>` : ''}
-          </div>
-          <span class="ev-signal ${sigCls}">${sigTxt}</span>
-        </div>`;
+      return `<div class="line-card ${cls}">
+        <div class="line-label">${label} ${mktLabel.toLowerCase()}</div>
+        <div class="line-odd">${odd.toFixed(2)}</div>
+        <div class="line-stats">
+          <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">${(prob*100).toFixed(1)}%</span></div>
+          <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
+          <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val ${kelly>0?'pos':''}">${kelly>0?kelly.toFixed(1)+'%':'—'}</span></div>
+          ${hitRate !== null ? `<div class="line-stat"><span class="line-stat-label">Últimos 5</span><span class="line-stat-val">${hitCount}/5 (${hitRate}%)</span></div>` : ''}
+        </div>
+        <span class="ev-signal ${sigCls}">${sigTxt}</span>
+      </div>`;
     }).join('');
 
-    // Formata últimos 5 com highlight
     const last5html = last5.map(x => {
-      const lineNums = sorted.map(s => parseInt(s.label));
-      const min = lineNums.length > 0 ? Math.min(...lineNums) : 999;
+      const min = sorted.length > 0 ? parseInt(sorted[0].label) : 999;
       return `<span${x >= min ? ' class="hit"' : ''}>${x}</span>`;
     }).join(' ');
 
-    allCards.push({ playerHasEV });
-
-    return `
-      <div class="player-card${playerHasEV ? ' has-ev' : ''}">
-        <div class="player-header">
-          <div class="player-name">${p.player}</div>
-          <div class="player-meta">
-            <span class="market-badge">${mkt}</span>
-            ${last5.length > 0 ? `<span class="last5">Últ. 5: ${last5html}</span>` : ''}
-            ${lambda !== null ? `<span class="last5" style="color:#555">λ=${lambda.toFixed(2)}</span>` : ''}
-          </div>
+    return `<div class="player-card${playerHasEV ? ' has-ev' : ''}">
+      <div class="player-header">
+        <div class="player-name">${p.player}</div>
+        <div class="player-meta">
+          <span class="market-badge">${mkt}</span>
+          ${last5.length > 0 ? `<span class="last5">Últ. 5: ${last5html}</span>` : ''}
+          ${lambda !== null ? `<span class="last5" style="color:#555">λ=${lambda.toFixed(2)}</span>` : ''}
         </div>
-        <div class="lines">${lineCards}</div>
-      </div>`;
+      </div>
+      <div class="lines">${lineCards}</div>
+    </div>`;
   }).join('');
 
   list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
@@ -459,10 +467,12 @@ function renderManual() {
   renderTopEV(topEVItems);
 
   // Métricas
-  document.getElementById('cnt-pos').textContent   = evPlusCount;
-  document.getElementById('cnt-total').textContent  = totalLines;
-  document.getElementById('best-ev').textContent    = bestEV > -Infinity && bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
-  document.getElementById('last-update').textContent = new Date(manualData.scrapedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('cnt-pos').textContent    = evPlusCount;
+  document.getElementById('cnt-total').textContent   = totalLines;
+  document.getElementById('best-ev').textContent     = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+  document.getElementById('last-update').textContent = latestScrapedAt
+    ? new Date(latestScrapedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : '—';
 }
 
 function hasEVPlus(p) {
@@ -473,25 +483,24 @@ function hasEVPlus(p) {
   if (sorted.length < 2) return false;
   const first = sorted[0], last = sorted[sorted.length - 1];
   let lambda;
-  try {
-    lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k);
-  } catch(e) { return false; }
+  try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); }
+  catch(e) { return false; }
   return sorted.some(({ odd, k }) => calcEV(poissonCDF(lambda, k), odd) > 3);
 }
 
 function renderTopEV(topList) {
-  const box = document.getElementById('top-ev-box');
+  const box  = document.getElementById('top-ev-box');
   const list = document.getElementById('top-ev-list');
   if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
-  list.innerHTML = topList.slice(0, 8).map((item, i) => {
+  list.innerHTML = topList.slice(0, 10).map((item, i) => {
     const hitStr = item.last5.length > 0
       ? item.last5.filter(x => x >= item.lineNum).length + '/' + item.last5.length
       : '';
     return `<div class="top-ev-item">
       <span class="top-ev-rank">${i + 1}</span>
       <span class="top-ev-player">${item.player}</span>
-      <span class="top-ev-line">${item.label}</span>
+      <span class="top-ev-line">${item.label} <span style="color:#555;font-size:10px">${item.mktLabel}</span></span>
       <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
       <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
       <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
