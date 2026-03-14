@@ -391,33 +391,21 @@ function clearData() {
 const NBA_CACHE   = {};   // playerName → { logs: [...], ts: Date }
 const NBA_ID_CACHE = {};  // playerName → playerId
 const SEASON = '2024-25';
-const PROXY  = 'https://corsproxy.io/?';
-
-function nbaHeaders() {
-  return {
-    'Accept': 'application/json',
-    'Referer': 'https://www.nba.com/',
-    'Origin': 'https://www.nba.com',
-    'x-nba-stats-origin': 'stats',
-    'x-nba-stats-token': 'true'
-  };
-}
+const PROXY  = 'https://api.allorigins.win/raw?url=';
 
 async function fetchNBAPlayerID(name) {
   if (NBA_ID_CACHE[name]) return NBA_ID_CACHE[name];
   try {
     const url = `https://stats.nba.com/stats/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=1`;
-    const res  = await fetch(PROXY + encodeURIComponent(url), { headers: nbaHeaders() });
+    const res  = await fetch(PROXY + encodeURIComponent(url));
     const data = await res.json();
     const rows = data.resultSets[0].rowSet;
     const hdrs = data.resultSets[0].headers;
     const idIdx   = hdrs.indexOf('PERSON_ID');
     const nameIdx = hdrs.indexOf('DISPLAY_FIRST_LAST');
-    // Busca nome exato ou aproximado
     const nameLower = name.toLowerCase().trim();
     let match = rows.find(r => r[nameIdx].toLowerCase() === nameLower);
     if (!match) {
-      // Tenta por sobrenome + primeiro nome parcial
       const parts = nameLower.split(' ');
       match = rows.find(r => {
         const rn = r[nameIdx].toLowerCase();
@@ -437,7 +425,7 @@ async function fetchNBAGameLogs(playerName) {
     const playerId = await fetchNBAPlayerID(playerName);
     if (!playerId) return null;
     const url = `https://stats.nba.com/stats/playergamelogs?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular+Season`;
-    const res  = await fetch(PROXY + encodeURIComponent(url), { headers: nbaHeaders() });
+    const res  = await fetch(PROXY + encodeURIComponent(url));
     const data = await res.json();
     const rows = data.resultSets[0].rowSet;
     const hdrs = data.resultSets[0].headers;
