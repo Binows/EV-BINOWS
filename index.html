@@ -133,6 +133,7 @@
     <button class="filter-btn" onclick="setFilter('pts',this)">Pontos</button>
     <button class="filter-btn" onclick="setFilter('reb',this)">Rebotes</button>
     <button class="filter-btn" onclick="setFilter('ast',this)">Assistências</button>
+    <button class="filter-btn" onclick="setFilter('3pts',this)">3 Pts</button>
   </div>
 </div>
 
@@ -275,28 +276,29 @@ function calcKelly(prob, odd, last5, lineNum) {
   return parseFloat(Math.min(kelly, 2.5).toFixed(1));
 }
 
-// Detecta mercado pelo conteúdo das linhas quando nome do arquivo não ajuda
+// Detecta mercado pelo nome do arquivo ou conteúdo
 function detectMarketByContent(players) {
   if (!players || players.length === 0) return 'desconhecido';
-  // Pega o maior valor de linha de todos os jogadores
-  let maxLine = 0;
+  // Conta quantos jogadores têm linha máxima em cada faixa
+  // 3pts: linhas raramente passam de 8; assist: ≤15; rebotes: ≤25; pontos: >25
+  let max = 0;
   for (const p of players) {
     for (const label of Object.keys(p.lines || {})) {
       const n = parseInt(label);
-      if (!isNaN(n) && n > maxLine) maxLine = n;
+      if (!isNaN(n) && n > max) max = n;
     }
   }
-  // Assistências: raramente > 15; Rebotes: raramente > 25; Pontos: chegam a 40+
-  if (maxLine <= 15) return 'assistências';
-  if (maxLine <= 25) return 'rebotes';
+  if (max <= 8)  return '3pts';
+  if (max <= 15) return 'assistências';
+  if (max <= 25) return 'rebotes';
   return 'pontos';
 }
 
 // ─────────────────────────────────────────────
 // MANUAL MODE — FILE HANDLING
 // ─────────────────────────────────────────────
-const MKT_NAMES  = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', desconhecido: '?' };
-const MKT_FILTER = { reb: 'rebotes', pts: 'pontos', ast: 'assistências' };
+const MKT_NAMES  = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', '3pts': '3Pts', desconhecido: '?' };
+const MKT_FILTER = { reb: 'rebotes', pts: 'pontos', ast: 'assistências', '3pts': '3pts' };
 
 function handleDrop(e) {
   e.preventDefault();
@@ -321,7 +323,8 @@ function handleFiles(files) {
           // Detecta mercado pelo nome do arquivo se não veio no JSON
           if (!data.market || data.market === 'desconhecido') {
             const fn = file.name.toLowerCase();
-            if (fn.includes('reb') || fn.includes('rebote'))       data.market = 'rebotes';
+            if (fn.includes('cesta') || fn.includes('3pt'))         data.market = '3pts';
+            else if (fn.includes('reb') || fn.includes('rebote'))   data.market = 'rebotes';
             else if (fn.includes('ast') || fn.includes('assist'))   data.market = 'assistências';
             else if (fn.includes('pts') || fn.includes('pont'))     data.market = 'pontos';
             else data.market = detectMarketByContent(data.players);
@@ -395,10 +398,11 @@ function renderManual() {
   }
 
   // Aplica filtro de mercado
-  if (activeFilter === 'reb') allPlayers = allPlayers.filter(p => p.market === 'rebotes');
-  else if (activeFilter === 'pts') allPlayers = allPlayers.filter(p => p.market === 'pontos');
-  else if (activeFilter === 'ast') allPlayers = allPlayers.filter(p => p.market === 'assistências');
-  else if (activeFilter === 'pos') allPlayers = allPlayers.filter(p => hasEVPlus(p));
+  if (activeFilter === 'reb')       allPlayers = allPlayers.filter(p => p.market === 'rebotes');
+  else if (activeFilter === 'pts')  allPlayers = allPlayers.filter(p => p.market === 'pontos');
+  else if (activeFilter === 'ast')  allPlayers = allPlayers.filter(p => p.market === 'assistências');
+  else if (activeFilter === '3pts') allPlayers = allPlayers.filter(p => p.market === '3pts');
+  else if (activeFilter === 'pos')  allPlayers = allPlayers.filter(p => hasEVPlus(p));
 
   const list    = document.getElementById('manual-list');
   const titleEl = document.getElementById('manual-section-title');
