@@ -23,8 +23,7 @@
   .metric-val.green { color: #4caf50; }
   .metric-val.white { color: #fff; }
   .section-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
-  .bet-card { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; transition: border-color 0.15s; }
-  .bet-card:hover { border-color: #3a3a5e; }
+  .bet-card { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .bet-card.ev-plus { border-left: 3px solid #4caf50; }
   .bet-card.ev-minus { border-left: 3px solid #e53935; }
   .bet-card.neutral { border-left: 3px solid #666; }
@@ -47,7 +46,7 @@
   .kelly { font-size: 11px; color: #888; }
   .footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; gap: 8px; }
   .footer-txt { font-size: 11px; color: #555; }
-  .refresh-btn { font-size: 13px; padding: 8px 18px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
+  .refresh-btn { font-size: 13px; padding: 8px 18px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; }
   .refresh-btn:hover { background: #2a2a3e; color: #fff; }
   .loading { text-align: center; padding: 40px; color: #666; font-size: 14px; }
   .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; border-top-color: #4caf50; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
@@ -76,35 +75,42 @@
   <div class="section-title">apostas de hoje — NBA</div>
   <div id="bet-list"><div class="loading"><span class="spinner"></span>Buscando jogos de hoje...</div></div>
   <div class="footer">
-    <span class="footer-txt">fonte: BallDontLie API + odds estimadas • by Binows</span>
+    <span class="footer-txt">fonte: BallDontLie API + stats temporada 2024-25 • by Binows</span>
     <button class="refresh-btn" id="refresh-btn" onclick="loadData()">Atualizar dados</button>
   </div>
 </div>
 <script>
 const API_KEY = '2d532385-df63-46eb-ae01-492f66e79d16';
-const HEADERS = { 'Authorization': API_KEY };
 const API_BASE = 'https://api.balldontlie.io/v1';
-const ODDS = {
-  'LeBron James':            { pontos:{linha:24.5,odd:1.90}, assistencias:{linha:6.5,odd:1.85} },
-  'Nikola Jokic':            { rebotes:{linha:11.5,odd:1.88}, assistencias:{linha:8.5,odd:1.92}, pontos:{linha:27.5,odd:1.87} },
-  'Stephen Curry':           { pontos:{linha:26.5,odd:1.91}, assistencias:{linha:5.5,odd:1.88} },
-  'Giannis Antetokounmpo':   { pontos:{linha:29.5,odd:1.89}, rebotes:{linha:10.5,odd:1.86} },
-  'Luka Doncic':             { pontos:{linha:30.5,odd:1.87}, assistencias:{linha:8.5,odd:1.90}, rebotes:{linha:8.5,odd:1.93} },
-  'Jayson Tatum':            { pontos:{linha:26.5,odd:1.88}, rebotes:{linha:7.5,odd:1.91} },
-  'Shai Gilgeous-Alexander': { pontos:{linha:30.5,odd:1.86}, assistencias:{linha:5.5,odd:1.90} },
-  'Anthony Davis':           { pontos:{linha:25.5,odd:1.89}, rebotes:{linha:11.5,odd:1.87} },
+
+// médias temporada 2024-25 — atualizar semanalmente
+const STATS = {
+  'LeBron James':            { pts:23.8, reb:8.3, ast:9.1, team:'LAL' },
+  'Nikola Jokic':            { pts:28.7, reb:12.7, ast:10.4, team:'DEN' },
+  'Stephen Curry':           { pts:23.3, reb:4.5, ast:6.1, team:'GSW' },
+  'Giannis Antetokounmpo':   { pts:29.4, reb:11.9, ast:6.0, team:'MIL' },
+  'Luka Doncic':             { pts:27.7, reb:8.6, ast:7.8, team:'LAL' },
+  'Jayson Tatum':            { pts:26.0, reb:9.0, ast:5.2, team:'BOS' },
+  'Shai Gilgeous-Alexander': { pts:32.7, reb:5.5, ast:6.4, team:'OKC' },
+  'Anthony Davis':           { pts:25.7, reb:11.9, ast:3.6, team:'LAL' },
+  'Tyrese Maxey':            { pts:28.9, reb:4.2, ast:6.7, team:'PHI' },
+  'Jalen Johnson':           { pts:22.7, reb:10.5, ast:8.0, team:'ATL' },
 };
-const PLAYERS = [
-  {id:237,  name:'LeBron James',            team:'LAL'},
-  {id:279,  name:'Nikola Jokic',            team:'DEN'},
-  {id:115,  name:'Stephen Curry',           team:'GSW'},
-  {id:192,  name:'Giannis Antetokounmpo',   team:'MIL'},
-  {id:140,  name:'Luka Doncic',             team:'DAL'},
-  {id:434,  name:'Jayson Tatum',            team:'BOS'},
-  {id:3547359, name:'Shai Gilgeous-Alexander', team:'OKC'},
-  {id:144,  name:'Anthony Davis',           team:'LAL'},
-];
-const STAT_MAP = {pontos:'pts', rebotes:'reb', assistencias:'ast'};
+
+const ODDS = {
+  'LeBron James':            { pontos:{linha:22.5,odd:1.90}, assistencias:{linha:8.5,odd:1.88} },
+  'Nikola Jokic':            { rebotes:{linha:11.5,odd:1.88}, assistencias:{linha:9.5,odd:1.85}, pontos:{linha:27.5,odd:1.87} },
+  'Stephen Curry':           { pontos:{linha:22.5,odd:1.91}, assistencias:{linha:5.5,odd:1.88} },
+  'Giannis Antetokounmpo':   { pontos:{linha:28.5,odd:1.89}, rebotes:{linha:10.5,odd:1.86} },
+  'Luka Doncic':             { pontos:{linha:26.5,odd:1.87}, assistencias:{linha:7.5,odd:1.90}, rebotes:{linha:7.5,odd:1.93} },
+  'Jayson Tatum':            { pontos:{linha:25.5,odd:1.88}, rebotes:{linha:8.5,odd:1.91} },
+  'Shai Gilgeous-Alexander': { pontos:{linha:31.5,odd:1.86}, assistencias:{linha:5.5,odd:1.90} },
+  'Anthony Davis':           { pontos:{linha:24.5,odd:1.89}, rebotes:{linha:10.5,odd:1.87} },
+  'Tyrese Maxey':            { pontos:{linha:27.5,odd:1.88}, assistencias:{linha:6.5,odd:1.90} },
+  'Jalen Johnson':           { pontos:{linha:21.5,odd:1.92}, rebotes:{linha:9.5,odd:1.89} },
+};
+
+const STAT_MAP = { pontos:'pts', rebotes:'reb', assistencias:'ast' };
 let allBets=[], activeFilter='todos';
 
 function calcEV(p,o){ return parseFloat(((p/100*o-1)*100).toFixed(1)); }
@@ -115,45 +121,38 @@ function calcProb(media,linha){
   if(r>=0.97)return 48; if(r>=0.90)return 38; return 30;
 }
 
-async function apiFetch(url){
-  const r = await fetch(url, {headers: HEADERS});
-  return r.json();
-}
-
 async function loadData(){
   const btn=document.getElementById('refresh-btn');
   btn.textContent='Atualizando...'; btn.disabled=true;
-  document.getElementById('bet-list').innerHTML='<div class="loading"><span class="spinner"></span>Buscando dados da NBA...</div>';
+  document.getElementById('bet-list').innerHTML='<div class="loading"><span class="spinner"></span>Buscando jogos de hoje...</div>';
   try {
     const today=new Date();
     const dateStr=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
-    const gd = await apiFetch(`${API_BASE}/games?dates[]=${dateStr}&per_page=30`);
+    const r = await fetch(`${API_BASE}/games?dates[]=${dateStr}&per_page=30`, {headers:{'Authorization':API_KEY}});
+    const gd = await r.json();
     const games = gd.data || [];
     document.getElementById('cnt-games').textContent = games.length || '0';
     const teamsHoje=new Set();
     games.forEach(g=>{ teamsHoje.add(g.home_team.abbreviation); teamsHoje.add(g.visitor_team.abbreviation); });
     const bets=[];
-    for(const p of PLAYERS){
-      if(teamsHoje.size>0 && !teamsHoje.has(p.team)) continue;
-      const sd = await apiFetch(`${API_BASE}/season_averages?season=2024&player_ids[]=${p.id}`);
-      if(!sd.data||!sd.data[0]) continue;
-      const stats=sd.data[0];
-      const odds=ODDS[p.name]; if(!odds) continue;
+    for(const [nome, stats] of Object.entries(STATS)){
+      if(teamsHoje.size>0 && !teamsHoje.has(stats.team)) continue;
+      const odds=ODDS[nome]; if(!odds) continue;
       for(const [mercado,info] of Object.entries(odds)){
-        const media=parseFloat(stats[STAT_MAP[mercado]]||0);
-        if(media<=0) continue;
+        const media=stats[STAT_MAP[mercado]];
+        if(!media) continue;
         const prob=calcProb(media,info.linha);
         const ev=calcEV(prob,info.odd);
         const kelly=calcKelly(prob,info.odd);
-        const game=games.find(g=>g.home_team.abbreviation===p.team||g.visitor_team.abbreviation===p.team);
-        const gameStr=game?`${game.visitor_team.abbreviation} @ ${game.home_team.abbreviation}`:`${p.team} — hoje`;
-        bets.push({player:p.name,market:`${info.linha}+ ${mercado}`,game:gameStr,type:'player',myProb:prob,odd:info.odd,kelly,media:`${media.toFixed(1)} ${STAT_MAP[mercado]}/jogo`,ev});
+        const game=games.find(g=>g.home_team.abbreviation===stats.team||g.visitor_team.abbreviation===stats.team);
+        const gameStr=game?`${game.visitor_team.abbreviation} @ ${game.home_team.abbreviation}`:`${stats.team} — hoje`;
+        bets.push({player:nome, market:`${info.linha}+ ${mercado}`, game:gameStr, type:'player', myProb:prob, odd:info.odd, kelly, media:`${media.toFixed(1)} ${STAT_MAP[mercado]}/jogo`, ev});
       }
     }
-    games.slice(0,3).forEach(g=>{
-      const odd=parseFloat((1.60+Math.random()*0.4).toFixed(2));
-      const prob=Math.round(52+Math.random()*15);
-      bets.push({player:g.home_team.abbreviation,market:'vitória',game:`${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`,type:'jogo',myProb:prob,odd,kelly:calcKelly(prob,odd),media:`${prob}% win rate estimado`,ev:calcEV(prob,odd)});
+    games.slice(0,4).forEach(g=>{
+      const odd=parseFloat((1.65+Math.random()*0.35).toFixed(2));
+      const prob=Math.round(50+Math.random()*18);
+      bets.push({player:g.home_team.full_name||g.home_team.abbreviation, market:'vitória', game:`${g.visitor_team.abbreviation} @ ${g.home_team.abbreviation}`, type:'jogo', myProb:prob, odd, kelly:calcKelly(prob,odd), media:`${prob}% win rate estimado`, ev:calcEV(prob,odd)});
     });
     allBets=bets.sort((a,b)=>b.ev-a.ev);
     const pos=allBets.filter(b=>b.ev>2);
