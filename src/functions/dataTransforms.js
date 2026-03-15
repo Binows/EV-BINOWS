@@ -372,7 +372,7 @@ export function buildManualView(datasets, { filter, oddThreshold, playerSearch }
   }
 
   const topEV = []
-  for (const player of bySearch) {
+  for (const player of mapped) {
     for (const line of player.lines) {
       metrics.cntTotal += 1
       if (line.ev > metrics.bestEV) metrics.bestEV = line.ev
