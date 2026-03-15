@@ -377,16 +377,17 @@ function applyEVModeToCards() {
 }
 
 // ── Busca odds Pinnacle via Odds API ───────────────────────────────────────
-const MKT_API = { pontos: 'player_points', rebotes: 'player_rebounds', assistências: 'player_assists', '3pts': 'player_threes_made' };
+const MKT_API = { pontos: 'player_points', rebotes: 'player_rebounds', assistências: 'player_assists', '3pts': 'player_threes' };
 
 async function loadPinnacleOdds() {
   if (pinnacleLoaded) { applyEVModeToCards(); return; }
   const statusEl = document.getElementById('nba-status');
   if (statusEl) { statusEl.textContent = '📌 Buscando odds Pinnacle...'; statusEl.style.display = 'block'; }
+  const _BASE = WORKER + '/odds', _SPORT = 'basketball_nba';
 
   try {
     // Busca eventos de hoje
-    const evRes = await fetch(`${WORKER}/odds/sports/basketball_nba/events`);
+    const evRes = await fetch(`${_BASE}/sports/${_SPORT}/events`);
     if (!evRes.ok) throw new Error('Erro ao buscar eventos');
     const events = await evRes.json();
     const agora = new Date();
@@ -401,7 +402,7 @@ async function loadPinnacleOdds() {
     for (const ev of jogos) {
       if (statusEl) statusEl.textContent = `📌 Pinnacle: ${ev.away_team} @ ${ev.home_team}...`;
       try {
-        const url = `${WORKER}/odds/sports/basketball_nba/events/${ev.id}/odds?regions=us&markets=${marketsNeeded.join(',')}&bookmakers=pinnacle&oddsFormat=decimal`;
+        const url = `${_BASE}/sports/${_SPORT}/events/${ev.id}/odds?regions=us&markets=${marketsNeeded.join(',')}&bookmakers=pinnacle&oddsFormat=decimal`;
         const res = await fetch(url);
         if (!res.ok) continue;
         const data = await res.json();
@@ -429,10 +430,11 @@ async function loadPinnacleOdds() {
       const lineNum = parseFloat(card.getAttribute('data-line'));
       const oddB365 = parseFloat(card.getAttribute('data-odd'));
 
-      // Tenta match exato primeiro, depois ±0.5
+      // Pinnacle usa linhas .5 (ex: Over 2.5 = "3+" da Bet365)
+      // Tenta: lineNum-0.5, lineNum, lineNum-1, lineNum+0.5
       let pinnacleOdd = null;
-      for (const delta of [0, 0.5, -0.5, 1, -1]) {
-        const key = slug + '|' + market + '|' + (lineNum - 1 + delta);
+      for (const target of [lineNum - 0.5, lineNum, lineNum - 1, lineNum + 0.5, lineNum - 1.5]) {
+        const key = slug + '|' + market + '|' + target;
         if (pinnacleCache[key]) { pinnacleOdd = pinnacleCache[key]; break; }
       }
 
@@ -446,8 +448,10 @@ async function loadPinnacleOdds() {
     });
 
     pinnacleLoaded = true;
+    console.log('Pinnacle cache keys:', Object.keys(pinnacleCache).slice(0, 10));
+    console.log('Total Pinnacle props:', Object.keys(pinnacleCache).length);
     applyEVModeToCards();
-    if (statusEl) { statusEl.textContent = `✓ Pinnacle: ${fetched} jogos carregados`; setTimeout(() => statusEl.style.display = 'none', 3000); }
+    if (statusEl) { statusEl.textContent = `✓ Pinnacle: ${fetched} jogos, ${Object.keys(pinnacleCache).length} props`; setTimeout(() => statusEl.style.display = 'none', 4000); }
   } catch(e) {
     if (statusEl) { statusEl.textContent = '⚠ Pinnacle: ' + e.message; setTimeout(() => statusEl.style.display = 'none', 4000); }
     console.error('loadPinnacleOdds error:', e);
