@@ -556,10 +556,11 @@ async function loadRefOdds() {
       try {
         const url = `${_BASE}/sports/${_SPORT}/events/${ev.id}/odds?regions=us&markets=${marketsNeeded.join(',')}&bookmakers=draftkings&oddsFormat=decimal`;
         const res = await fetch(url);
-        if (!res.ok) continue;
+        if (!res.ok) { console.warn('[DK] HTTP', res.status, 'para jogo', ev.id); continue; }
         const data = await res.json();
+        console.log('[DK] Resposta jogo', ev.away_team, '@', ev.home_team, '— bookmakers:', data.bookmakers?.length ?? 'undefined', '| keys:', Object.keys(data).join(','));
         const dk = data.bookmakers?.find(b => b.key === 'draftkings');
-        if (!dk) { console.warn('[DK] bookmaker não encontrado no jogo', ev.id); continue; }
+        if (!dk) { console.warn('[DK] draftkings ausente. Bookmakers disponíveis:', data.bookmakers?.map(b => b.key) ?? []); continue; }
 
         for (const mkt of dk.markets) {
           const marketPT = MKT_API_REVERSE[mkt.key];
