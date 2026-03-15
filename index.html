@@ -96,27 +96,6 @@
     border-color: #c8a84b66;
   }
 
-  /* DraftKings EV+ card */
-  .line-card.ev-plus-dk {
-    border-color: #4a9eff44;
-    background: #0a1a2a22;
-  }
-  .line-card.ev-plus-dk.high-value {
-    border-color: #4a9eff;
-    border-width: 2px;
-    background: linear-gradient(135deg, #0a1020 0%, #0f1e35 50%, #0a1020 100%);
-    box-shadow: 0 0 12px #4a9eff33, inset 0 0 20px #4a9eff08;
-    position: relative;
-  }
-  .line-card.ev-plus-dk.high-value::before {
-    content: '★';
-    position: absolute;
-    top: 6px; right: 8px;
-    font-size: 10px;
-    color: #4a9eff;
-    opacity: 0.8;
-  }
-  .line-card.ev-plus-dk.high-value .line-odd { color: #4a9eff; }
 
   .line-label { font-size: 11px; color: #666; margin-bottom: 4px; }
   .line-odd { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; transition: color 0.2s; }
@@ -156,18 +135,6 @@
   }
   .top-ev-item.high-value .top-ev-odd { color: #c8a84b; font-weight: 600; }
   .top-ev-item.high-value .top-ev-rank { color: #c8a84b; }
-  /* DraftKings ranking item */
-  .top-ev-item.dk-item {
-    border-left-color: #4a9eff;
-  }
-  .top-ev-item.dk-item.high-value {
-    border-color: #4a9eff;
-    border-left-color: #4a9eff;
-    background: linear-gradient(90deg, #0f1e35 0%, #0f0f13 60%);
-    box-shadow: 0 0 8px #4a9eff22;
-  }
-  .top-ev-item.dk-item.high-value .top-ev-odd { color: #4a9eff; font-weight: 600; }
-  .top-ev-item.dk-item.high-value .top-ev-rank { color: #4a9eff; }
 
   .top-ev-rank { font-size: 12px; color: #555; width: 18px; text-align: right; flex-shrink: 0; }
   .top-ev-player { font-size: 13px; font-weight: 600; color: #fff; flex: 1; }
@@ -193,28 +160,11 @@
   }
   .search-input::placeholder { color: #444; }
 
-  .ev-toggle {
-    display: flex; gap: 2px; background: #0f0f13;
-    border: 1px solid #2a2a3e; border-radius: 20px; padding: 3px;
-  }
-  .ev-toggle-btn {
-    font-size: 11px; padding: 4px 10px; border-radius: 16px;
-    border: none; background: transparent; color: #666; cursor: pointer;
-    transition: all 0.15s; white-space: nowrap;
-  }
-  .ev-toggle-btn.active { background: #2a2a3e; color: #fff; }
-  .ev-toggle-btn.dk.active { background: #1a2a3d; color: #4a9eff; }
-
-  .line-stat-val.pinnacle { color: #4a9eff; font-weight: 600; }
-  .ev-signal.dk { background: #1a2a3d; color: #4a9eff; border: 1px solid #4a9eff44; }
 
   .top-ev-stars { font-size: 11px; min-width: 60px; text-align: center; letter-spacing: 1px; }
   .quality-filter-btn.active { background: #2a2a3e !important; color: #c8a84b !important; border-color: #c8a84b !important; }
 
   .player-card.hidden-search { display: none; }
-
-  /* FIX: card sem match no DK fica esmaecido */
-  .line-card.dk-no-match { opacity: 0.35; }
 
   @media (max-width: 600px) {
     .metrics { grid-template-columns: repeat(2, 1fr); }
@@ -251,10 +201,6 @@
       <span style="font-size:12px;color:#444">🔍</span>
       <input class="search-input" id="player-search" type="text" placeholder="Buscar jogador..."
         oninput="onPlayerSearch(this.value)">
-    </div>
-    <div class="ev-toggle">
-      <button class="ev-toggle-btn active" id="toggle-season" onclick="setEVMode('season', this)">📊 Temporada</button>
-      <button class="ev-toggle-btn dk" id="toggle-dk" onclick="setEVMode('dk', this)">📌 DraftKings</button>
     </div>
   </div>
 </div>
@@ -346,10 +292,7 @@ let activeFilter = 'todos';
 let allDatasets  = [];
 let allLiveBets  = [];
 let oddThreshold = 2.00;
-let evMode       = 'season';
 let playerSearch = '';
-let refCache     = {};
-let refLoaded    = false;
 
 // ─── FIX 1: onThresholdChange também atualiza métricas no modo DK ───────────
 function onThresholdChange(val) {
@@ -359,7 +302,6 @@ function onThresholdChange(val) {
   document.getElementById('threshold-display').textContent = n.toFixed(2);
   applyHighValueHighlight();
   // Se estiver no modo DK, recalcula métricas com o novo threshold
-  if (evMode === 'dk') updateMetricsFromDOM();
 }
 
 // ─── FIX 2: onPlayerSearch funciona no modo DK também ────────────────────────
@@ -373,368 +315,8 @@ function onPlayerSearch(val) {
   });
 }
 
-function setEVMode(mode, el) {
-  evMode = mode;
-  document.querySelectorAll('.ev-toggle-btn').forEach(b => b.classList.remove('active'));
-  el.classList.add('active');
-  if (mode === 'dk') {
-    loadRefOdds();
-  } else {
-    applyEVModeToCards();
-  }
-}
-
-// ─── FIX 3: applyEVModeToCards atualiza métricas e respeita activeFilter ─────
-function applyEVModeToCards() {
-  const isDK = evMode === 'dk';
-
-  document.querySelectorAll('[data-player]').forEach(card => {
-    // FIX 3a: no modo DK, cards sem match ficam esmaecidos (não simplesmente sumidos)
-    const evPinnacle = card.getAttribute('data-ev-pinnacle');
-    const oddCard = parseFloat(card.getAttribute('data-odd'));
-    if (isDK && (evPinnacle === 'NaN' || oddCard < 1.50)) {
-      card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
-      card.classList.add('dk-no-match');
-      const signalEl = card.querySelector('.ev-signal');
-      if (signalEl) {
-        signalEl.textContent = evPinnacle === 'NaN' ? 'sem match DK' : 'odd baixa';
-        signalEl.className = 'ev-signal neu';
-      }
-      return;
-    }
-    card.classList.remove('dk-no-match');
-
-    const evRaw = isDK
-      ? evPinnacle
-      : (card.getAttribute('data-ev-season') || card.getAttribute('data-ev'));
-
-    const ev = parseFloat(evRaw || 'NaN');
-    if (isNaN(ev)) return;
-
-    const evEl     = card.querySelector('.ev-val');
-    const signalEl = card.querySelector('.ev-signal');
-    const dkRefEl  = card.querySelector('.dk-ref');
-    const sigCls   = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
-    const sigTxt   = ev > 3 ? 'EV+' : ev < -3 ? 'EV-' : 'neutro';
-
-    if (evEl) {
-      evEl.textContent = (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
-      evEl.className   = 'line-stat-val ev-val ' + sigCls + (isDK ? ' pinnacle' : '');
-    }
-    if (signalEl) {
-      signalEl.textContent = isDK ? sigTxt + ' DK' : sigTxt;
-      signalEl.className   = 'ev-signal ' + sigCls + (isDK && ev > 3 ? ' dk' : '');
-    }
-    if (dkRefEl) {
-      if (isDK) {
-        const oddDK = parseFloat(card.getAttribute('data-odd-dk') || 'NaN');
-        const dkLine = card.getAttribute('data-dk-line');
-        dkRefEl.style.display = 'flex';
-        const method  = card.getAttribute('data-dk-method') || '';
-        const methodLabel = method === 'direct' ? '✓ direto' : method === 'poisson' ? '~ Poisson' : '';
-        const dkLabel = (!isNaN(oddDK) && dkLine) ? `${oddDK.toFixed(2)} Over ${dkLine} ${methodLabel}` : '-';
-        dkRefEl.querySelector('.dk-ref-val').textContent = dkLabel;
-      } else {
-        dkRefEl.style.display = 'none';
-      }
-    }
-
-    const odd = parseFloat(card.getAttribute('data-odd'));
-    card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
-
-    // Cap: EV > 60% no modo DK = anomalia, não destaca como EV+
-    const evCapped = isDK ? Math.min(ev, 60) : ev;
-
-    if (evCapped > 3) {
-      card.classList.add(isDK ? 'ev-plus-dk' : 'ev-plus');
-      if (odd >= oddThreshold) card.classList.add('high-value');
-    } else if (evCapped < -3) {
-      card.classList.add('ev-minus');
-    }
-  });
-
-  // FIX 3b: aplica filtro de mercado mesmo no modo DK
-  applyActiveFilterToCards();
-
-  // FIX 3c: recalcula métricas após atualizar os cards
-  updateMetricsFromDOM();
-
-  renderTopEVFromDOM();
-}
-
-// ─── FIX 3b: aplica activeFilter sobre os .player-card no modo DK ────────────
-function applyActiveFilterToCards() {
-  if (activeFilter === 'todos' || activeFilter === 'pos') {
-    // 'pos' é tratado por visibilidade de EV, não por mercado
-    document.querySelectorAll('.player-card[data-market-type]').forEach(card => {
-      card.style.display = '';
-    });
-    if (activeFilter === 'pos') {
-      // Esconde player-cards que não têm nenhum line-card com ev-plus ou ev-plus-dk
-      document.querySelectorAll('.player-card').forEach(card => {
-        const hasEV = card.querySelector('.ev-plus, .ev-plus-dk');
-        card.style.display = hasEV ? '' : 'none';
-      });
-    }
-    return;
-  }
-  const filterMap = { pts: 'pontos', reb: 'rebotes', ast: 'assistências', '3pts': '3pts' };
-  const wantedMarket = filterMap[activeFilter];
-  if (!wantedMarket) return;
-  document.querySelectorAll('.player-card[data-market-type]').forEach(card => {
-    card.style.display = card.getAttribute('data-market-type') === wantedMarket ? '' : 'none';
-  });
-}
-
-// ─── FIX 4: updateMetricsFromDOM — lê EV correto do DOM no modo DK ───────────
-function updateMetricsFromDOM() {
-  const isDK = evMode === 'dk';
-  let evPlusCount = 0, bestEV = -Infinity;
-
-  document.querySelectorAll('[data-player][data-odd]').forEach(card => {
-    // Ignora cards de player-card (containers), só line-cards
-    if (card.classList.contains('player-card')) return;
-
-    let ev;
-    if (isDK) {
-      ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
-      if (isNaN(ev)) return;
-    } else {
-      ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
-      if (isNaN(ev)) return;
-    }
-
-    if (ev > 3) {
-      evPlusCount++;
-      if (ev > bestEV) bestEV = ev;
-    }
-  });
-
-  document.getElementById('cnt-pos').textContent  = evPlusCount > 0 ? evPlusCount : '0';
-  document.getElementById('best-ev').textContent  = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
-}
-
-// Markets principais + alternativas do DK
-// A chave é o market PT (pontos/rebotes/...), o valor é array com principal + alternate
-const MKT_API = {
-  pontos:       ['player_points',    'player_points_alternate'],
-  rebotes:      ['player_rebounds',  'player_rebounds_alternate'],
-  assistências: ['player_assists',   'player_assists_alternate'],
-  '3pts':       ['player_threes',    'player_threes_alternate'],
-};
-
-// Mapa reverso: market key da API → market PT
-const MKT_API_REVERSE = {};
-for (const [pt, keys] of Object.entries(MKT_API))
-  for (const k of keys) MKT_API_REVERSE[k] = pt;
-
-async function loadRefOdds() {
-  if (refLoaded) { applyEVModeToCards(); return; }
-  const statusEl = document.getElementById('nba-status');
-  if (statusEl) { statusEl.textContent = '📌 Buscando odds DraftKings...'; statusEl.style.display = 'block'; }
-  const _BASE = WORKER + '/odds', _SPORT = 'basketball_nba';
-
-  try {
-    const evRes = await fetch(`${_BASE}/sports/${_SPORT}/events`);
-    if (!evRes.ok) throw new Error('Erro ao buscar eventos');
-    const events = await evRes.json();
-    const hoje = new Date().toISOString().slice(0, 10);
-    let jogos = events.filter(e => e.commence_time.slice(0, 10) === hoje).slice(0, 8);
-    if (!jogos.length) jogos = events.slice(0, 6);
-    if (!jogos.length) throw new Error('Nenhum jogo encontrado');
-
-    // Monta lista de markets necessários (principal + alternate) com base nos datasets importados
-    const marketsNeeded = [...new Set(
-      allDatasets.flatMap(d => MKT_API[d.market] || []).filter(Boolean)
-    )];
-    console.log('[DK] Jogos:', jogos.length, '| Mercados:', marketsNeeded, '| Datasets:', allDatasets.length);
-    if (!marketsNeeded.length) throw new Error('Nenhum mercado reconhecido');
-
-    let fetched = 0;
-    for (const ev of jogos) {
-      if (statusEl) statusEl.textContent = `📌 DraftKings: ${ev.away_team} @ ${ev.home_team}...`;
-      try {
-        const url = `${_BASE}/sports/${_SPORT}/events/${ev.id}/odds?regions=us&markets=${marketsNeeded.join(',')}&bookmakers=draftkings&oddsFormat=decimal`;
-        const res = await fetch(url);
-        if (!res.ok) { console.warn('[DK] HTTP', res.status, 'para jogo', ev.id); continue; }
-        const data = await res.json();
-        console.log('[DK] Resposta jogo', ev.away_team, '@', ev.home_team, '— bookmakers:', data.bookmakers?.length ?? 'undefined', '| keys:', Object.keys(data).join(','));
-        const dk = data.bookmakers?.find(b => b.key === 'draftkings');
-        if (!dk) { console.warn('[DK] draftkings ausente. Bookmakers disponíveis:', data.bookmakers?.map(b => b.key) ?? []); continue; }
-
-        for (const mkt of dk.markets) {
-          const marketPT = MKT_API_REVERSE[mkt.key];
-          if (!marketPT) continue;
-          for (const out of mkt.outcomes) {
-            if (out.name !== 'Over') continue;
-            // Chave: slug|market|linha — ex: "evan-mobley|assistências|4.5"
-            const key = playerSlug(out.description) + '|' + marketPT + '|' + out.point;
-            // Guarda a melhor odd disponível para cada linha
-            if (!refCache[key] || out.price > refCache[key]) {
-              refCache[key] = out.price;
-            }
-          }
-        }
-        fetched++;
-      } catch(e) { console.warn('[DK] fetch error:', e); }
-    }
-
-    console.log('[DK] Cache keys (primeiros 10):', Object.keys(refCache).slice(0, 10));
-    console.log('[DK] Total props no cache:', Object.keys(refCache).length);
-
-    // ── Nova estratégia: comparação direta por linha mais próxima ────────────────
-    //
-    // Bet365 tem "5+ Ast" → procura no DK a linha Over 4.5 (mais próxima por baixo)
-    // Se achar: EV = (prob_fair_DK) * odd_B365 - 1
-    // Se não achar linha exata: fallback para Poisson calibrado pela linha principal
-    //
-    // Agrupamento do cache DK por jogador+mercado para facilitar busca
-    const dkByPlayerMarket = {}; // slug|market → [{line, odd}]
-    for (const [key, odd] of Object.entries(refCache)) {
-      const [slug, market, lineStr] = key.split('|');
-      const line = parseFloat(lineStr);
-      if (isNaN(line)) continue;
-      const pmKey = slug + '|' + market;
-      if (!dkByPlayerMarket[pmKey]) dkByPlayerMarket[pmKey] = [];
-      dkByPlayerMarket[pmKey].push({ line, odd });
-    }
-    // Ordena cada lista por linha crescente
-    for (const arr of Object.values(dkByPlayerMarket)) arr.sort((a, b) => a.line - b.line);
-
-    console.log('[DK] Jogadores+mercados com linhas DK:', Object.keys(dkByPlayerMarket).length);
-
-    const DK_MARGIN = 1.06;
-    let matched = 0, matchedDirect = 0, matchedPoisson = 0, unmatched = 0;
-
-    document.querySelectorAll('[data-player][data-line]').forEach(card => {
-      if (card.classList.contains('player-card')) return;
-
-      const slug    = card.getAttribute('data-player');
-      const market  = card.getAttribute('data-market');
-      // lineNum para Bet365: "5+" → 5, que corresponde a Over 4.5 no DK
-      const lineNum = parseFloat(card.getAttribute('data-line'));
-      const oddB365 = parseFloat(card.getAttribute('data-odd'));
-
-      if (isNaN(lineNum) || isNaN(oddB365)) return;
-
-      const pmKey = slug + '|' + market;
-      const dkLines = dkByPlayerMarket[pmKey];
-
-      if (!dkLines || dkLines.length === 0) {
-        card.setAttribute('data-ev-pinnacle', 'NaN');
-        unmatched++;
-        return;
-      }
-
-      // Estratégia 1: busca linha DK equivalente
-      // Bet365 "5+" = P(X >= 5) = P(X > 4) → equivalente ao DK Over 4.5
-      const targetDKLine = lineNum - 0.5;
-
-      // Procura linha exata ou a mais próxima (tolerância ±1.0)
-      let bestMatch = null;
-      let bestDist  = Infinity;
-      for (const dk of dkLines) {
-        const dist = Math.abs(dk.line - targetDKLine);
-        if (dist < bestDist) { bestDist = dist; bestMatch = dk; }
-      }
-
-      let evDK, dkOddUsed, dkLineUsed, method;
-
-      if (bestMatch && bestDist <= 1.0) {
-        // ── Comparação direta: usa prob fair da linha DK equivalente ──────────
-        // Validação de sanidade: se as odds forem muito divergentes, não é comparável
-        // Ex: DK Over 29.5 @ 1.04 vs B365 30+ @ 29.00 = anomalia, não EV real
-        const oddRatio = oddB365 / bestMatch.odd;
-        if (oddRatio > 4.0) {
-          // Odds muito divergentes — provavelmente linhas com contextos diferentes
-          // Usa Poisson com todas as linhas DK disponíveis ao invés
-          if (dkLines.length >= 2) {
-            // cai no fallback Poisson abaixo
-          } else {
-            card.setAttribute('data-ev-pinnacle', 'NaN');
-            unmatched++;
-            return;
-          }
-        } else {
-          const probFairDK = (1 / bestMatch.odd) / DK_MARGIN;
-          evDK       = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
-          dkOddUsed  = bestMatch.odd;
-          dkLineUsed = bestMatch.line;
-          method     = 'direct';
-          matchedDirect++;
-        }
-      }
-
-      // Fallback Poisson (também usado quando oddRatio > 4.0)
-      if (!method) {
-        // Usa as linhas do DK para calibrar o lambda e extrapola para a linha B365
-        if (dkLines.length >= 2) {
-          const mid = Math.floor(dkLines.length / 2);
-          const p1 = (1 / dkLines[0].odd) / DK_MARGIN;
-          const p2 = (1 / dkLines[mid].odd) / DK_MARGIN;
-          const k1 = Math.floor(dkLines[0].line);
-          const k2 = Math.floor(dkLines[mid].line);
-
-          const bisect = (targetP, k) => {
-            let lo = 0.1, hi = 80;
-            for (let i = 0; i < 80; i++) {
-              const m = (lo + hi) / 2;
-              let cdf = 0, t = Math.exp(-m);
-              for (let j = 0; j <= k; j++) { cdf += t; t *= m / (j + 1); }
-              (1 - cdf) > targetP ? lo = m : hi = m;
-            }
-            return (lo + hi) / 2;
-          };
-          const lambda = (bisect(p1, k1) + bisect(p2, k2)) / 2;
-
-          const kB365 = lineNum - 1;
-          let cdf = 0, term = Math.exp(-lambda);
-          for (let j = 0; j <= kB365; j++) { cdf += term; term *= lambda / (j + 1); }
-          const probFair = Math.max(0, Math.min(1, 1 - cdf));
-          evDK       = parseFloat(((probFair * oddB365 - 1) * 100).toFixed(1));
-          // âncora visual: linha DK mais próxima
-          dkOddUsed  = bestMatch ? bestMatch.odd : dkLines[0].odd;
-          dkLineUsed = bestMatch ? bestMatch.line : dkLines[0].line;
-          method     = 'poisson';
-          matchedPoisson++;
-        } else if (dkLines.length === 1) {
-          // Só 1 linha — usa diretamente mesmo com distância maior
-          const probFairDK = (1 / dkLines[0].odd) / DK_MARGIN;
-          evDK       = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
-          dkOddUsed  = dkLines[0].odd;
-          dkLineUsed = dkLines[0].line;
-          method     = 'single';
-          matchedPoisson++;
-        } else {
-          card.setAttribute('data-ev-pinnacle', 'NaN');
-          unmatched++;
-          return;
-        }
-      }
-
-      card.setAttribute('data-ev-pinnacle', evDK);
-      card.setAttribute('data-odd-dk', dkOddUsed);
-      card.setAttribute('data-dk-line', dkLineUsed);
-      card.setAttribute('data-dk-method', method);
-      matched++;
-    });
-
-    console.log(`[DK] Matching: ${matched} total (${matchedDirect} direto, ${matchedPoisson} Poisson), ${unmatched} sem match`);
-
-    refLoaded = true;
-    applyEVModeToCards();
-    if (statusEl) {
-      statusEl.textContent = `✓ DraftKings: ${fetched} jogos, ${Object.keys(refCache).length} linhas (${matchedDirect} direto, ${matchedPoisson} Poisson, ${unmatched} sem match)`;
-      setTimeout(() => statusEl.style.display = 'none', 6000);
-    }
-  } catch(e) {
-    if (statusEl) { statusEl.textContent = '⚠ DraftKings: ' + e.message; setTimeout(() => statusEl.style.display = 'none', 4000); }
-    console.error('[DK] loadRefOdds error:', e);
-  }
-}
-
 function applyHighValueHighlight() {
-  document.querySelectorAll('.line-card.ev-plus, .line-card.ev-plus-dk').forEach(card => {
+  document.querySelectorAll('.line-card.ev-plus').forEach(card => {
     const odd = parseFloat(card.getAttribute('data-odd'));
     card.classList.toggle('high-value', odd >= oddThreshold);
   });
@@ -755,23 +337,12 @@ function setMode(mode, el) {
   if (mode === 'manual' && allDatasets.length) renderManual();
 }
 
-// ─── FIX 5: setFilter aplica filtro no modo DK sem re-renderizar tudo ─────────
 function setFilter(f, el) {
   activeFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  if (currentMode === 'manual') {
-    if (evMode === 'dk' && allDatasets.length) {
-      // No modo DK, filtra diretamente no DOM sem re-renderizar
-      applyActiveFilterToCards();
-      updateMetricsFromDOM();
-      renderTopEVFromDOM();
-    } else if (allDatasets.length) {
-      renderManual();
-    }
-  } else if (currentMode === 'live') {
-    renderLive();
-  }
+  if (currentMode === 'manual' && allDatasets.length) renderManual();
+  else if (currentMode === 'live') renderLive();
 }
 
 function resetMetrics() {
@@ -931,8 +502,6 @@ function handleFiles(files) {
         }
         loaded++;
         if (loaded === files.length) {
-          refLoaded = false;
-          // Reseta filtro para 'todos' ao importar — evita ficar preso num mercado
           if (activeFilter !== 'todos' && activeFilter !== 'pos') {
             activeFilter = 'todos';
             document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
@@ -972,7 +541,6 @@ function updateChips() {
 
 function removeDataset(i) {
   allDatasets.splice(i, 1);
-  refLoaded = false;
   updateChips();
   if (allDatasets.length) renderManual();
   else {
@@ -986,7 +554,6 @@ function removeDataset(i) {
 
 function clearData() {
   allDatasets = [];
-  refLoaded = false;
   updateChips();
   document.getElementById('manual-list').innerHTML = '';
   document.getElementById('manual-section-title').style.display = 'none';
@@ -1132,7 +699,6 @@ async function loadSeasonStats(players) {
     if (logs) updatePlayerCards(player, market, logs);
   }
   renderTopEVFromDOM();
-  updateMetricsFromDOM(); // FIX: atualiza métricas após carregar stats
   if (statusEl) { statusEl.textContent = '✓ Stats da temporada carregados'; setTimeout(() => { statusEl.style.display = 'none'; }, 3000); }
 }
 
@@ -1160,8 +726,7 @@ function updatePlayerCards(playerName, market, logs) {
     const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
     const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
 
-    // Só atualiza display de EV se estiver no modo temporada
-    if (evMode === 'season') {
+    {
       const evEl = card.querySelector('.ev-val');
       if (evEl) {
         evEl.textContent = (ev > 0 ? '+' : '') + ev + '%';
@@ -1172,7 +737,7 @@ function updatePlayerCards(playerName, market, logs) {
         signalEl.textContent = sigTxt;
         signalEl.className = 'ev-signal ' + sigCls;
       }
-      card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
+      card.classList.remove('ev-plus', 'ev-minus', 'high-value');
       if (ev > 3) {
         card.classList.add('ev-plus');
         if (odd >= oddThreshold) card.classList.add('high-value');
@@ -1234,7 +799,6 @@ function startExtensionSync() {
     const updated = await syncFromExtension();
     if (updated) {
       console.log('[Sync] Dados atualizados pela extensão — re-renderizando...');
-      refLoaded = false;
       updateChips();
       renderManual();
       const el = document.getElementById('nba-status');
@@ -1297,23 +861,8 @@ function calcQualityScore(ev, odd, hrStr) {
   return 1;
 }
 
-// Score de qualidade para modo DK sem hit rate disponível
-// Usa só volatilidade da odd e EV como proxy de confiança
-function calcQualityScoreDK(ev, odd) {
-  // Volatilidade: odd 1.5→0.92, odd 2→0.82, odd 3.5→0.65, odd 7→0.45, odd 14→0.26
-  const volatilityFactor = Math.max(0.12, 1 / (1 + Math.log(odd) * 0.60));
-  // EV moderado normalizado — no DK já filtramos >60% e <5%, então faixa esperada é 5-50%
-  const evFactor = Math.min(ev / 40, 1.0);
-  const score = volatilityFactor * 0.65 + evFactor * 0.35;
-  // Máximo 4 estrelas sem hit rate — nunca 5 pois falta confirmação histórica
-  if (score >= 0.70) return 4;
-  if (score >= 0.52) return 3;
-  if (score >= 0.35) return 2;
-  return 1;
-}
-
-function starsHTML(n, isDK) {
-  const color = isDK ? '#4a9eff' : '#c8a84b';
+function starsHTML(n) {
+  const color = '#c8a84b';
   const empty = '#2a2a3e';
   return Array.from({ length: 5 }, (_, i) =>
     `<span style="color:${i < n ? color : empty};font-size:11px;line-height:1">★</span>`
@@ -1331,41 +880,19 @@ function setQualityFilter(stars) {
   renderTopEVFromDOM();
 }
 function renderTopEVFromDOM() {
-  const isDK = evMode === 'dk';
   const cards = document.querySelectorAll('[data-player][data-ev]');
   const items = [];
 
   cards.forEach(card => {
-    // Pula containers player-card
     if (card.classList.contains('player-card')) return;
-    // Pula cards escondidos pelo filtro de mercado
     const parentCard = card.closest('.player-card');
     if (parentCard && parentCard.style.display === 'none') return;
 
     const odd = parseFloat(card.getAttribute('data-odd'));
-
-    // No modo DK, aplica oddThreshold para eliminar linhas baixas (ruído do modelo)
-    // Ex: DK âncora Over 24.5 → Bet365 10+ @ 1.07 = matematicamente EV+ mas inaproveitável
-    if (isDK && odd < oddThreshold) return;
-
-    let ev;
-    if (isDK) {
-      ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
-      if (isNaN(ev)) return;
-      // Cap: EV > 60% no modo DK = anomalia de matching (odds incompatíveis)
-      if (ev > 60) return;
-      // Descarta linhas com menos de 5 hits na temporada — linhas exóticas irreais
-      // Ex: Donovan Mitchell 50+ Pts @ 26.00 — 0/59 temp. = nunca aconteceu
-      const hr = card.getAttribute('data-hr') || '';
-      if (hr) {
-        const hits = parseInt(hr.split('/')[0]);
-        if (!isNaN(hits) && hits < 5) return;
-      }
-    } else {
-      ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
-    }
+    const ev  = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
     if (isNaN(ev) || ev <= 3) return;
 
+    const hr = card.getAttribute('data-hr') || '';
     items.push({
       player:   card.getAttribute('data-name'),
       market:   card.getAttribute('data-market'),
@@ -1375,19 +902,11 @@ function renderTopEVFromDOM() {
       ev,
       kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
       lineNum:  parseInt(card.getAttribute('data-line')),
-      hr:       card.getAttribute('data-hr') || '',
-      isDK,
-      quality: (() => {
-        const hr = card.getAttribute('data-hr') || '';
-        // Se tem hit rate carregado, usa score completo
-        if (hr && hr.includes('/')) return calcQualityScore(ev, odd, hr);
-        // No modo DK sem hr, usa proxy por odd+EV (máx 4★)
-        if (isDK) return calcQualityScoreDK(ev, odd);
-        // Modo temporada sem hr ainda carregando — score neutro
-        return 0;
-      })()
+      hr,
+      quality:  hr.includes('/') ? calcQualityScore(ev, odd, hr) : 0
     });
   });
+
 
   // Filtra por qualidade mínima se ativo
   const filtered = minQualityFilter > 0
@@ -1406,7 +925,6 @@ function renderTopEVFromDOM() {
 
 function renderManual() {
   if (!allDatasets.length) return;
-  refLoaded = false;
   let allPlayers = [], latestScrapedAt = null;
   for (const ds of allDatasets) {
     const mkt = ds.market || 'desconhecido';
@@ -1414,9 +932,8 @@ function renderManual() {
     if (!latestScrapedAt || ds.scrapedAt > latestScrapedAt) latestScrapedAt = ds.scrapedAt;
   }
 
-  // Filtros de mercado só no modo temporada (no DK, o filtro é aplicado via DOM depois)
   let allPlayersFiltered = allPlayers;
-  if (evMode !== 'dk') {
+  {
     if (activeFilter === 'reb')       allPlayersFiltered = allPlayers.filter(p => p.market === 'rebotes');
     else if (activeFilter === 'pts')  allPlayersFiltered = allPlayers.filter(p => p.market === 'pontos');
     else if (activeFilter === 'ast')  allPlayersFiltered = allPlayers.filter(p => p.market === 'assistências');
@@ -1466,7 +983,7 @@ function renderManual() {
           '<div class="line-card ' + cls + hvCls + '"' +
             ' data-player="' + playerSlug(p.player) + '" data-name="' + p.player + '" data-market="' + mkt + '" data-mktlabel="' + mktLabel + '"' +
             ' data-label="Sim" data-line="0" data-odd="' + oddSim + '" data-prob="' + probFair.toFixed(4) + '"' +
-            ' data-ev="' + ev + '" data-ev-season="' + ev + '" data-ev-pinnacle="NaN" data-kelly="' + kelly + '" data-hr="">' +
+            ' data-ev="' + ev + '" data-ev-season="' + ev + '" data-kelly="' + kelly + '" data-hr="">' +
             '<div class="line-label">Sim ' + mktLabel + '</div>' +
             '<div class="line-odd">' + oddSim.toFixed(2) + '</div>' +
             '<div class="line-stats">' +
@@ -1507,13 +1024,12 @@ function renderManual() {
       return `<div class="line-card ${cls}${highValCls}"
         data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
         data-label="${label}" data-line="${parseInt(label)}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
-        data-ev="${ev}" data-ev-season="${ev}" data-ev-pinnacle="NaN" data-kelly="${kelly}" data-hr="">
+        data-ev="${ev}" data-ev-season="${ev}" data-kelly="${kelly}" data-hr="">
         <div class="line-label">${label} ${mktLabel.toLowerCase()}</div>
         <div class="line-odd">${odd.toFixed(2)}</div>
         <div class="line-stats">
           <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">${(prob*100).toFixed(1)}%</span></div>
           <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ev-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
-          <div class="line-stat dk-ref" style="display:none"><span class="line-stat-label">DraftKings ref.</span><span class="line-stat-val dk-ref-val" style="color:#4a9eff">-</span></div>
           <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val ${kelly>0?'pos':''}">${kelly>0?kelly+'%':'—'}</span></div>
           <div class="line-stat"><span class="line-stat-label">Hit rate temporada</span><span class="line-stat-val season-hr" style="color:#555">carregando...</span></div>
         </div>
@@ -1560,19 +1076,15 @@ function hasEVPlus(p) {
 function renderTopEV(topList) {
   const box  = document.getElementById('top-ev-box');
   const list = document.getElementById('top-ev-list');
-  const isDK = evMode === 'dk';
   if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
 
-  box.querySelector('.top-ev-title').textContent = isDK
-    ? '📌 maiores EV+ vs DraftKings'
-    : '🏆 maiores EV+ desta rodada';
+  box.querySelector('.top-ev-title').textContent = '🏆 maiores EV+ desta rodada';
 
   list.innerHTML = topList.slice(0, 15).map((item, i) => {
     const isHighValue = item.odd >= oddThreshold;
-    const dkClass     = (item.isDK || isDK) ? ' dk-item' : '';
     const quality     = item.quality || 0;
-    const stars       = starsHTML(quality, item.isDK || isDK);
+    const stars       = starsHTML(quality);
 
     // Cor da borda esquerda por qualidade
     const qualityColor = quality >= 4 ? '#4caf50' : quality >= 3 ? '#c8a84b' : quality >= 2 ? '#888' : '#444';
