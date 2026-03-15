@@ -80,7 +80,7 @@
   .top-ev-odd { font-size: 13px; color: #ccc; margin-left: auto; }
   .top-ev-ev { font-size: 13px; font-weight: 700; color: #4caf50; min-width: 56px; text-align: right; }
   .top-ev-banca { font-size: 11px; color: #4caf5099; min-width: 64px; text-align: right; }
-  .top-ev-last5 { font-size: 11px; color: #555; min-width: 80px; text-align: right; }
+  .top-ev-last5 { font-size: 11px; color: #555; min-width: 90px; text-align: right; }
   .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
   .req-info { font-size: 11px; color: #4caf50; }
   @media (max-width: 600px) {
@@ -189,10 +189,7 @@ function resetMetrics() {
 
 function poissonCDF(lambda, k) {
   let prob = 0, term = Math.exp(-lambda);
-  for (let i = 0; i <= k; i++) {
-    prob += term;
-    term *= lambda / (i + 1);
-  }
+  for (let i = 0; i <= k; i++) { prob += term; term *= lambda / (i + 1); }
   return Math.max(0, Math.min(1, 1 - prob));
 }
 
@@ -205,47 +202,34 @@ function calibrateLambda(p_a, k_a, p_b, k_b) {
     }
     return (lo + hi) / 2;
   }
-  const la = bisect(p_a, k_a);
-  const lb = bisect(p_b, k_b);
-  return (la + lb) / 2;
+  return (bisect(p_a, k_a) + bisect(p_b, k_b)) / 2;
 }
 
 const BET365_MARGIN = 1.07;
 function fairProb(odd) { return (1 / odd) / BET365_MARGIN; }
 function calcEV(prob, odd) { return parseFloat(((prob * odd - 1) * 100).toFixed(1)); }
 
-function calcKelly(prob, odd, last5, lineNum) {
+function calcKelly(prob, odd) {
   if (odd <= 1) return 0;
   let kelly = Math.max(0, (prob * odd - 1) / (odd - 1)) * 50;
-  kelly = Math.min(kelly, 2.5);
-  if (last5 && last5.length > 0 && lineNum) {
-    const hits = last5.filter(x => x >= lineNum).length;
-    if      (hits === 0) kelly = 0;
-    else if (hits === 1) kelly = Math.min(kelly * 0.2, 0.25);
-    else if (hits === 2) kelly = kelly * 0.4;
-    else if (hits === 3) kelly = kelly * 0.6;
-    else if (hits === 4) kelly = kelly * 0.8;
-  }
-  return parseFloat(kelly.toFixed(2));
+  return parseFloat(Math.min(kelly, 2.5).toFixed(2));
 }
 
 function detectMarketByContent(players) {
   if (!players || players.length === 0) return 'desconhecido';
   let max = 0;
-  for (const p of players) {
+  for (const p of players)
     for (const label of Object.keys(p.lines || {})) {
       const n = parseInt(label);
       if (!isNaN(n) && n > max) max = n;
     }
-  }
   if (max <= 8)  return '3pts';
   if (max <= 15) return 'assistências';
   if (max <= 25) return 'rebotes';
   return 'pontos';
 }
 
-const MKT_NAMES  = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', '3pts': '3Pts', desconhecido: '?' };
-const MKT_FILTER = { reb: 'rebotes', pts: 'pontos', ast: 'assistências', '3pts': '3pts' };
+const MKT_NAMES = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', '3pts': '3Pts', desconhecido: '?' };
 
 function handleDrop(e) {
   e.preventDefault();
@@ -264,14 +248,13 @@ function handleFiles(files) {
         if (!data.players || !Array.isArray(data.players)) return;
         const id = file.name + '_' + (data.scrapedAt || '');
         if (!allDatasets.find(d => d._id === id)) {
-          data._id       = id;
-          data._filename = file.name;
+          data._id = id; data._filename = file.name;
           if (!data.market || data.market === 'desconhecido') {
             const fn = file.name.toLowerCase();
-            if (fn.includes('cesta') || fn.includes('3pt'))         data.market = '3pts';
-            else if (fn.includes('reb') || fn.includes('rebote'))   data.market = 'rebotes';
-            else if (fn.includes('ast') || fn.includes('assist'))   data.market = 'assistências';
-            else if (fn.includes('pts') || fn.includes('pont'))     data.market = 'pontos';
+            if (fn.includes('cesta') || fn.includes('3pt'))       data.market = '3pts';
+            else if (fn.includes('reb') || fn.includes('rebote')) data.market = 'rebotes';
+            else if (fn.includes('ast') || fn.includes('assist')) data.market = 'assistências';
+            else if (fn.includes('pts') || fn.includes('pont'))   data.market = 'pontos';
             else data.market = detectMarketByContent(data.players);
           }
           allDatasets.push(data);
@@ -296,10 +279,9 @@ function updateChips() {
   drop.classList.add('loaded');
   document.getElementById('drop-label').textContent = allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '') + ' carregado' + (allDatasets.length > 1 ? 's' : '');
   chips.innerHTML = allDatasets.map((d, i) => {
-    const mkt   = MKT_NAMES[d.market] || '?';
-    const count = d.players.length;
+    const mkt = MKT_NAMES[d.market] || '?';
     return `<span style="display:inline-flex;align-items:center;gap:5px;background:#2a2a3e;border:1px solid #3a3a4e;border-radius:20px;padding:3px 10px;font-size:11px;color:#aaa">
-      <span style="color:#4caf50;font-weight:600">${mkt}</span> ${count}j
+      <span style="color:#4caf50;font-weight:600">${mkt}</span> ${d.players.length}j
       <span onclick="removeDataset(${i})" style="cursor:pointer;color:#555;margin-left:2px">✕</span>
     </span>`;
   }).join('');
@@ -374,12 +356,7 @@ async function fetchNBAGameLogs(playerName) {
     const reb = hdrs.indexOf('REB');
     const ast = hdrs.indexOf('AST');
     const fg3 = hdrs.indexOf('FG3M') !== -1 ? hdrs.indexOf('FG3M') : hdrs.indexOf('FG3_M');
-    const logs = rows.map(r => ({
-      pts: r[pts] ?? 0,
-      reb: r[reb] ?? 0,
-      ast: r[ast] ?? 0,
-      fg3: fg3 !== -1 ? (r[fg3] ?? 0) : 0
-    }));
+    const logs = rows.map(r => ({ pts: r[pts]??0, reb: r[reb]??0, ast: r[ast]??0, fg3: fg3!==-1?(r[fg3]??0):0 }));
     NBA_CACHE[playerName] = { logs, ts: Date.now() };
     return logs;
   } catch(e) { console.error('fetchNBAGameLogs error:', playerName, e); return null; }
@@ -448,6 +425,7 @@ function updatePlayerCards(playerName, market, logs) {
       kellyEl.className   = 'line-stat-val kelly-val' + (kelly > 0 ? ' pos' : '');
     }
     card.setAttribute('data-kelly', kelly);
+    card.setAttribute('data-hr', hr.hits + '/' + hr.games);
   });
 }
 
@@ -470,7 +448,7 @@ function renderTopEVFromDOM() {
       ev,
       kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
       lineNum:  parseInt(card.getAttribute('data-line')),
-      last5:    JSON.parse(card.getAttribute('data-last5') || '[]')
+      hr:       card.getAttribute('data-hr') || ''
     });
   });
   items.sort((a, b) => b.ev - a.ev);
@@ -483,7 +461,7 @@ function renderManual() {
   let latestScrapedAt = null;
   for (const ds of allDatasets) {
     const mkt = ds.market || 'desconhecido';
-    for (const p of ds.players) { allPlayers.push({ ...p, market: mkt }); }
+    for (const p of ds.players) allPlayers.push({ ...p, market: mkt });
     if (!latestScrapedAt || ds.scrapedAt > latestScrapedAt) latestScrapedAt = ds.scrapedAt;
   }
   if (activeFilter === 'reb')       allPlayers = allPlayers.filter(p => p.market === 'rebotes');
@@ -529,12 +507,12 @@ function renderManual() {
       if (lambda !== null) {
         prob  = poissonCDF(lambda, k);
         ev    = calcEV(prob, odd);
-        kelly = parseFloat(Math.min(Math.max(0, (prob * odd - 1) / (odd - 1)) * 50, 2.5).toFixed(2));
+        kelly = calcKelly(prob, odd);
       }
       totalLines++;
       if (ev > 3) {
         evPlusCount++; playerHasEV = true;
-        topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), last5 });
+        topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), hr: '' });
       }
       if (ev > bestEV) bestEV = ev;
       const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
@@ -544,7 +522,7 @@ function renderManual() {
       return `<div class="line-card ${cls}"
         data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
         data-label="${label}" data-line="${lineNum}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
-        data-ev="${ev}" data-kelly="${kelly}" data-last5='${JSON.stringify(last5)}'>
+        data-ev="${ev}" data-kelly="${kelly}" data-hr="">
         <div class="line-label">${label} ${mktLabel.toLowerCase()}</div>
         <div class="line-odd">${odd.toFixed(2)}</div>
         <div class="line-stats">
@@ -589,8 +567,7 @@ function hasEVPlus(p) {
   if (sorted.length < 2) return false;
   const first = sorted[0], last = sorted[sorted.length - 1];
   let lambda;
-  try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); }
-  catch(e) { return false; }
+  try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); } catch(e) { return false; }
   return sorted.some(({ odd, k }) => calcEV(poissonCDF(lambda, k), odd) > 3);
 }
 
@@ -600,9 +577,7 @@ function renderTopEV(topList) {
   if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
   list.innerHTML = topList.slice(0, 10).map((item, i) => {
-    const hitStr = item.last5.length > 0
-      ? item.last5.filter(x => x >= item.lineNum).length + '/' + item.last5.length
-      : '';
+    const hrTxt = item.hr ? item.hr + ' temp.' : '';
     return `<div class="top-ev-item">
       <span class="top-ev-rank">${i + 1}</span>
       <span class="top-ev-player">${item.player}</span>
@@ -610,7 +585,7 @@ function renderTopEV(topList) {
       <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
       <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
       <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
-      <span class="top-ev-last5">${hitStr ? 'Últ.5: ' + hitStr : ''}</span>
+      <span class="top-ev-last5">${hrTxt}</span>
     </div>`;
   }).join('');
 }
@@ -684,10 +659,10 @@ async function loadLiveData() {
     }
     allLiveBets = bets.sort((a, b) => b.ev - a.ev);
     const pos = allLiveBets.filter(b => b.ev > 2);
-    document.getElementById('cnt-pos').textContent  = pos.length;
+    document.getElementById('cnt-pos').textContent   = pos.length;
     document.getElementById('cnt-total').textContent = allLiveBets.length;
     const bestEV = pos.length > 0 ? Math.max(...pos.map(b => b.ev)) : 0;
-    document.getElementById('best-ev').textContent  = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+    document.getElementById('best-ev').textContent   = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
     document.getElementById('last-update').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     renderLive();
   } catch(e) {
