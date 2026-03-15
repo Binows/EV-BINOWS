@@ -947,11 +947,15 @@ function renderTopEVFromDOM() {
   const cards = document.querySelectorAll('[data-player][data-ev]');
   const items = [];
 
+  const DK_MIN_ODD = 1.70; // abaixo disso o modelo fica impreciso por distância da âncora
+
   cards.forEach(card => {
+    const odd = parseFloat(card.getAttribute('data-odd'));
     let ev;
     if (isDK) {
       ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
-      if (isNaN(ev)) return; // sem match DK, não lista
+      if (isNaN(ev)) return;
+      if (odd < DK_MIN_ODD) return; // corta odds baixas no modo DK
     } else {
       ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
     }
