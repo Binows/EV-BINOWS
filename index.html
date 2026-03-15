@@ -555,7 +555,7 @@ async function loadSeasonStats(players) {
 
 function updatePlayerCards(playerName, market, logs) {
   const slug  = playerSlug(playerName);
-  const cards = document.querySelectorAll(`[data-player="${slug}"]`);
+  const cards = document.querySelectorAll(`[data-player="${slug}"][data-market="${market}"]`);
   cards.forEach(card => {
     const lineNum = parseInt(card.getAttribute('data-line'));
     const odd     = parseFloat(card.getAttribute('data-odd'));
