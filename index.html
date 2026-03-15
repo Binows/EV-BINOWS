@@ -214,21 +214,30 @@
   </div>
 
   <div id="manual-ui">
-    <div class="manual-box">
-      <h3>Importe os JSONs exportados pela extensão — vários de uma vez</h3>
-      <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
-           ondragover="event.preventDefault();this.classList.add('dragover')"
-           ondragleave="this.classList.remove('dragover')"
-           ondrop="handleDrop(event)">
-        <p id="drop-label">Clique aqui ou arraste os arquivos .json</p>
-        <span>Selecione vários de uma vez — rebotes, pontos, assistências, múltiplos jogos</span>
-      </div>
-      <div id="file-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
-      <input type="file" id="file-input" accept=".json" multiple style="display:none" onchange="handleFiles(this.files)">
-      <div class="manual-actions">
-        <button class="btn-sm primary" onclick="document.getElementById('file-input').click()">📂 Abrir arquivos</button>
-        <button class="btn-sm share" id="share-btn" onclick="compartilhar()" style="display:none">🔗 Compartilhar</button>
-        <button class="btn-sm" onclick="clearData()">✕ Limpar tudo</button>
+    <!-- Import bar colapsável -->
+    <div class="import-bar" id="import-bar" onclick="toggleImport()">
+      <span style="font-size:14px">📂</span>
+      <span class="import-bar-label" id="import-bar-label">Importar arquivos JSON</span>
+      <span class="import-bar-meta" id="import-bar-meta"></span>
+      <span class="import-bar-toggle open" id="import-toggle">▲</span>
+    </div>
+    <div id="import-panel">
+      <div class="manual-box">
+        <h3>Importe os JSONs exportados pela extensão — vários de uma vez</h3>
+        <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('dragover')"
+             ondragleave="this.classList.remove('dragover')"
+             ondrop="handleDrop(event)">
+          <p id="drop-label">Clique aqui ou arraste os arquivos .json</p>
+          <span>Selecione vários de uma vez — rebotes, pontos, assistências, múltiplos jogos</span>
+        </div>
+        <div id="file-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+        <input type="file" id="file-input" accept=".json" multiple style="display:none" onchange="handleFiles(this.files)">
+        <div class="manual-actions">
+          <button class="btn-sm primary" onclick="document.getElementById('file-input').click()">📂 Abrir arquivos</button>
+          <button class="btn-sm share" id="share-btn" onclick="compartilhar()" style="display:none">🔗 Compartilhar</button>
+          <button class="btn-sm" onclick="clearData()">✕ Limpar tudo</button>
+        </div>
       </div>
     </div>
     <div class="share-box" id="share-box">
@@ -301,7 +310,40 @@ function onThresholdChange(val) {
   oddThreshold = n;
   document.getElementById('threshold-display').textContent = n.toFixed(2);
   applyHighValueHighlight();
-  // Se estiver no modo DK, recalcula métricas com o novo threshold
+}
+
+function toggleImport(forceOpen) {
+  const panel = document.getElementById('import-panel');
+  const toggle = document.getElementById('import-toggle');
+  const isOpen = panel.style.display !== 'none';
+  if (forceOpen === true || (!isOpen && forceOpen !== false)) {
+    panel.style.display = 'block';
+    toggle.classList.add('open');
+  } else {
+    panel.style.display = 'none';
+    toggle.classList.remove('open');
+  }
+}
+
+function updateImportBar() {
+  const label = document.getElementById('import-bar-label');
+  const meta  = document.getElementById('import-bar-meta');
+  if (!allDatasets.length) {
+    label.textContent = 'Importar arquivos JSON';
+    meta.textContent  = '';
+    toggleImport(true);
+    return;
+  }
+  // Resume: "24 arquivos · Jazz x Kings, Warriors x Knicks..."
+  const games = [...new Set(allDatasets.map(d => d.gameName).filter(Boolean))];
+  const gameStr = games.slice(0, 3).map(g => {
+    const parts = g.split(' x ');
+    return parts[0].split(' ').slice(-1)[0] + ' x ' + (parts[1] || '').split(' ').slice(-1)[0];
+  }).join(', ') + (games.length > 3 ? ' +' + (games.length - 3) : '');
+  label.textContent = allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '') + ' carregado' + (allDatasets.length > 1 ? 's' : '');
+  meta.textContent  = gameStr || '';
+  // Colapsa automaticamente quando tem arquivos
+  toggleImport(false);
 }
 
 // ─── FIX 2: onPlayerSearch funciona no modo DK também ────────────────────────
@@ -529,6 +571,7 @@ function updateChips() {
   drop.classList.add('loaded');
   document.getElementById('drop-label').textContent = allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '') + ' carregado' + (allDatasets.length > 1 ? 's' : '');
   document.getElementById('share-btn').style.display = 'inline-flex';
+  updateImportBar();
   chips.innerHTML = allDatasets.map((d, i) => {
     const mkt = MKT_NAMES[d.market] || '?';
     const gameShort = d.gameName ? ' · ' + d.gameName.split(' x ')[0].split(' ').slice(-1)[0] + ' x ' + (d.gameName.split(' x ')[1] || '').split(' ').slice(-1)[0] : '';
@@ -561,6 +604,7 @@ function clearData() {
   document.getElementById('share-box').style.display = 'none';
   document.getElementById('file-input').value = '';
   saveToStorage();
+  updateImportBar();
   resetMetrics();
 }
 
@@ -952,6 +996,16 @@ function renderManual() {
   let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
   const topEVItems = [];
 
+  // Ordena jogadores por melhor EV+ antes de renderizar
+  allPlayersFiltered = allPlayersFiltered.map(p => {
+    if (p.binary) return { ...p, _bestEV: p.lines['Sim'] ? calcEV((1/p.lines['Sim'])/(p.oddNao?(1/p.lines['Sim']+1/p.oddNao):1.08), p.lines['Sim']) : -999 };
+    const s2 = Object.entries(p.lines||{}).map(([l,o])=>({odd:o,k:parseInt(l)-1})).filter(x=>!isNaN(x.k)&&x.odd>=1.01&&x.odd<36).sort((a,b)=>a.k-b.k);
+    if (s2.length < 2) return { ...p, _bestEV: -999 };
+    const m2 = calcDynamicMargin(s2.map(x=>x.odd));
+    let lam2 = null; try { lam2 = calibrateLambdaFromMiddle(s2, m2); } catch(e) {}
+    return { ...p, _bestEV: lam2 ? Math.max(...s2.map(({odd,k})=>calcEV(poissonCDF(lam2,k),odd))) : -999 };
+  }).sort((a,b) => b._bestEV - a._bestEV);
+
   const html = allPlayersFiltered.map(p => {
     const mkt = p.market || 'desconhecido', mktLabel = MKT_NAMES[mkt] || mkt;
     const linesEntries = Object.entries(p.lines || {});
@@ -1017,10 +1071,11 @@ function renderManual() {
       const isHighValue = ev > 3 && odd >= oddThreshold;
       if (ev > 3) { evPlusCount++; playerHasEV = true; topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), hr: '' }); }
       if (ev > bestEV) bestEV = ev;
-      const cls = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
+      if (ev < -3) return '';
+      const cls = ev > 3 ? 'ev-plus' : '';
       const highValCls = isHighValue ? ' high-value' : '';
-      const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
-      const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
+      const sigCls = ev > 3 ? 'pos' : 'neu';
+      const sigTxt = ev > 3 ? 'EV+' : 'neutro';
       return `<div class="line-card ${cls}${highValCls}"
         data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
         data-label="${label}" data-line="${parseInt(label)}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
