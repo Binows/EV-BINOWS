@@ -13,10 +13,28 @@
   .mode-tabs { display: flex; gap: 4px; background: #0f0f13; border-radius: 8px; padding: 4px; }
   .mode-tab { font-size: 12px; padding: 6px 16px; border-radius: 6px; border: none; background: transparent; color: #888; cursor: pointer; transition: all 0.15s; }
   .mode-tab.active { background: #2a2a3e; color: #fff; }
-  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .filter-btn { font-size: 12px; padding: 6px 14px; border-radius: 20px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
   .filter-btn:hover { border-color: #666; color: #fff; }
   .filter-btn.active { background: #4caf50; color: #fff; border-color: #4caf50; }
+
+  /* Threshold control */
+  .threshold-control {
+    display: flex; align-items: center; gap: 8px;
+    background: #0f0f13; border: 1px solid #2a2a3e;
+    border-radius: 20px; padding: 5px 12px;
+  }
+  .threshold-label { font-size: 11px; color: #666; white-space: nowrap; }
+  .threshold-label span { color: #c8a84b; font-weight: 600; }
+  .threshold-input {
+    width: 48px; font-size: 12px; font-weight: 600;
+    background: #1a1a2e; border: 1px solid #3a3a4e;
+    border-radius: 6px; color: #fff; text-align: center;
+    padding: 3px 4px; outline: none;
+    transition: border-color 0.15s;
+  }
+  .threshold-input:focus { border-color: #c8a84b; }
+
   .container { max-width: 980px; margin: 0 auto; padding: 24px 16px; }
   .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
   .metric { background: #1a1a2e; border-radius: 10px; padding: 14px; border: 1px solid #2a2a3e; }
@@ -48,11 +66,43 @@
   .market-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #2a2a3e; color: #aaa; }
   .last5 { font-size: 11px; color: #666; }
   .lines { display: flex; flex-wrap: wrap; gap: 8px; }
-  .line-card { background: #0f0f13; border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 14px; min-width: 110px; flex: 1; }
+
+  /* Base line card */
+  .line-card {
+    background: #0f0f13; border: 1px solid #2a2a3e;
+    border-radius: 8px; padding: 10px 14px; min-width: 110px; flex: 1;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
   .line-card.ev-plus { border-color: #4caf5066; background: #1a3d1a22; }
   .line-card.ev-minus { border-color: #e5393533; }
+
+  /* High-value highlight: EV+ AND odd >= threshold */
+  .line-card.ev-plus.high-value {
+    border-color: #c8a84b;
+    border-width: 2px;
+    background: linear-gradient(135deg, #1a1a0a 0%, #2a2510 50%, #1a1a0a 100%);
+    box-shadow: 0 0 12px #c8a84b33, inset 0 0 20px #c8a84b08;
+    position: relative;
+  }
+  .line-card.ev-plus.high-value::before {
+    content: '★';
+    position: absolute;
+    top: 6px; right: 8px;
+    font-size: 10px;
+    color: #c8a84b;
+    opacity: 0.8;
+  }
+  .line-card.ev-plus.high-value .line-odd {
+    color: #c8a84b;
+  }
+  .line-card.ev-plus.high-value .ev-signal.pos {
+    background: #2a2205;
+    color: #c8a84b;
+    border-color: #c8a84b66;
+  }
+
   .line-label { font-size: 11px; color: #666; margin-bottom: 4px; }
-  .line-odd { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .line-odd { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; transition: color 0.2s; }
   .line-stats { display: flex; flex-direction: column; gap: 3px; }
   .line-stat { display: flex; justify-content: space-between; font-size: 11px; }
   .line-stat-label { color: #555; }
@@ -74,11 +124,33 @@
   .top-ev { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: none; }
   .top-ev-title { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
   .top-ev-list { display: flex; flex-direction: column; gap: 6px; }
-  .top-ev-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #0f0f13; border-radius: 8px; border: 1px solid #2a2a3e; border-left: 3px solid #4caf50; }
+  .top-ev-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; background: #0f0f13;
+    border-radius: 8px; border: 1px solid #2a2a3e; border-left: 3px solid #4caf50;
+    transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  }
+
+  /* High-value ranking item */
+  .top-ev-item.high-value {
+    border-color: #c8a84b;
+    border-left-color: #c8a84b;
+    border-left-width: 3px;
+    background: linear-gradient(90deg, #2a2510 0%, #0f0f13 60%);
+    box-shadow: 0 0 8px #c8a84b22;
+  }
+  .top-ev-item.high-value .top-ev-odd {
+    color: #c8a84b;
+    font-weight: 600;
+  }
+  .top-ev-item.high-value .top-ev-rank {
+    color: #c8a84b;
+  }
+
   .top-ev-rank { font-size: 12px; color: #555; width: 18px; text-align: right; flex-shrink: 0; }
   .top-ev-player { font-size: 13px; font-weight: 600; color: #fff; flex: 1; }
   .top-ev-line { font-size: 12px; color: #888; }
-  .top-ev-odd { font-size: 13px; color: #ccc; margin-left: auto; }
+  .top-ev-odd { font-size: 13px; color: #ccc; margin-left: auto; transition: color 0.2s; }
   .top-ev-ev { font-size: 13px; font-weight: 700; color: #4caf50; min-width: 56px; text-align: right; }
   .top-ev-banca { font-size: 11px; color: #4caf5099; min-width: 64px; text-align: right; }
   .top-ev-last5 { font-size: 11px; color: #555; min-width: 90px; text-align: right; }
@@ -113,6 +185,11 @@
     <button class="filter-btn" onclick="setFilter('reb',this)">Rebotes</button>
     <button class="filter-btn" onclick="setFilter('ast',this)">Assistências</button>
     <button class="filter-btn" onclick="setFilter('3pts',this)">3 Pts</button>
+    <div class="threshold-control">
+      <span class="threshold-label">odd mín. <span id="threshold-display">2.00</span></span>
+      <input class="threshold-input" type="number" id="threshold-input" value="2.00" min="1.01" max="20" step="0.10"
+        oninput="onThresholdChange(this.value)" onchange="onThresholdChange(this.value)">
+    </div>
   </div>
 </div>
 
@@ -182,10 +259,33 @@ firebase.initializeApp({
 });
 const _db = firebase.database();
 
-let currentMode  = 'manual';
-let activeFilter = 'todos';
-let allDatasets  = [];
-let allLiveBets  = [];
+let currentMode    = 'manual';
+let activeFilter   = 'todos';
+let allDatasets    = [];
+let allLiveBets    = [];
+let oddThreshold   = 2.00;   // <-- valor padrão do threshold
+
+function onThresholdChange(val) {
+  const n = parseFloat(val);
+  if (isNaN(n) || n < 1.01) return;
+  oddThreshold = n;
+  document.getElementById('threshold-display').textContent = n.toFixed(2);
+  applyHighValueHighlight();   // atualiza highlight sem re-renderizar tudo
+}
+
+// Aplica / remove .high-value nos cards e itens do ranking com base no threshold atual
+function applyHighValueHighlight() {
+  // Cards de linha
+  document.querySelectorAll('.line-card.ev-plus').forEach(card => {
+    const odd = parseFloat(card.getAttribute('data-odd'));
+    card.classList.toggle('high-value', odd >= oddThreshold);
+  });
+  // Itens do ranking
+  document.querySelectorAll('.top-ev-item').forEach(item => {
+    const odd = parseFloat(item.getAttribute('data-odd'));
+    item.classList.toggle('high-value', odd >= oddThreshold);
+  });
+}
 
 // Verifica sessão compartilhada na URL
 (function() {
@@ -545,12 +645,14 @@ function renderManual() {
       let prob = fairProb(odd), ev = 0, kelly = 0;
       if (lambda !== null) { prob = poissonCDF(lambda, k); ev = calcEV(prob, odd); kelly = calcKelly(prob, odd); }
       totalLines++;
+      const isHighValue = ev > 3 && odd >= oddThreshold;
       if (ev > 3) { evPlusCount++; playerHasEV = true; topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), hr: '' }); }
       if (ev > bestEV) bestEV = ev;
       const cls = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
+      const highValCls = isHighValue ? ' high-value' : '';
       const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
       const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
-      return `<div class="line-card ${cls}"
+      return `<div class="line-card ${cls}${highValCls}"
         data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
         data-label="${label}" data-line="${parseInt(label)}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
         data-ev="${ev}" data-kelly="${kelly}" data-hr="">
@@ -602,15 +704,18 @@ function renderTopEV(topList) {
   const box = document.getElementById('top-ev-box'), list = document.getElementById('top-ev-list');
   if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
-  list.innerHTML = topList.slice(0, 10).map((item, i) => `<div class="top-ev-item">
-    <span class="top-ev-rank">${i + 1}</span>
-    <span class="top-ev-player">${item.player}</span>
-    <span class="top-ev-line">${item.label} <span style="color:#555;font-size:10px">${item.mktLabel}</span></span>
-    <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
-    <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
-    <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
-    <span class="top-ev-last5">${item.hr ? item.hr + ' temp.' : ''}</span>
-  </div>`).join('');
+  list.innerHTML = topList.slice(0, 10).map((item, i) => {
+    const isHighValue = item.odd >= oddThreshold;
+    return `<div class="top-ev-item${isHighValue ? ' high-value' : ''}" data-odd="${item.odd}">
+      <span class="top-ev-rank">${i + 1}</span>
+      <span class="top-ev-player">${item.player}</span>
+      <span class="top-ev-line">${item.label} <span style="color:#555;font-size:10px">${item.mktLabel}</span></span>
+      <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
+      <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
+      <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
+      <span class="top-ev-last5">${item.hr ? item.hr + ' temp.' : ''}</span>
+    </div>`;
+  }).join('');
 }
 
 const BASE = WORKER + '/odds', SPORT = 'basketball_nba';
