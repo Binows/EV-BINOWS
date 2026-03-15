@@ -246,18 +246,25 @@
 
 <!-- Firebase via CDN compat (sem module, sem escopo isolado) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onload="onFirebaseReady()"></script>
 <script>
-firebase.initializeApp({
-  apiKey: "AIzaSyBp5jjj0SaFuN3xK_ZCsHBknntLwP7LG48",
-  authDomain: "ev-binows.firebaseapp.com",
-  databaseURL: "https://ev-binows-default-rtdb.firebaseio.com",
-  projectId: "ev-binows",
-  storageBucket: "ev-binows.firebasestorage.app",
-  messagingSenderId: "769525305200",
-  appId: "1:769525305200:web:8d1fbdab5f97577a55c9b5"
-});
-const _db = firebase.database();
+let _db = null;
+function initFirebase() {
+  if (typeof firebase === 'undefined') { console.error('Firebase SDK nao carregou'); return false; }
+  if (!firebase.apps.length) {
+    firebase.initializeApp({
+      apiKey: "AIzaSyBp5jjj0SaFuN3xK_ZCsHBknntLwP7LG48",
+      authDomain: "ev-binows.firebaseapp.com",
+      databaseURL: "https://ev-binows-default-rtdb.firebaseio.com",
+      projectId: "ev-binows",
+      storageBucket: "ev-binows.firebasestorage.app",
+      messagingSenderId: "769525305200",
+      appId: "1:769525305200:web:8d1fbdab5f97577a55c9b5"
+    });
+  }
+  _db = firebase.database();
+  return true;
+}
 
 let currentMode    = 'manual';
 let activeFilter   = 'todos';
@@ -287,24 +294,7 @@ function applyHighValueHighlight() {
   });
 }
 
-// Verifica sessão compartilhada na URL
-(function() {
-  const sessaoId = new URLSearchParams(window.location.search).get('s');
-  if (!sessaoId) return;
-  document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
-  _db.ref('sessoes/' + sessaoId).get().then(snap => {
-    const data = snap.val();
-    if (!data || !data.datasets) {
-      document.getElementById('drop-area').innerHTML = '<p style="color:#e53935">Link expirado ou inválido.</p>';
-      return;
-    }
-    allDatasets = data.datasets;
-    document.getElementById('drop-area').innerHTML = `<p id="drop-label">${allDatasets.length} arquivo${allDatasets.length > 1 ? 's' : ''} carregado${allDatasets.length > 1 ? 's' : ''}</p>`;
-    document.getElementById('drop-area').classList.add('loaded');
-    document.getElementById('share-btn').style.display = 'inline-flex';
-    renderManual();
-  });
-})();
+// sessão compartilhada tratada em onFirebaseReady()
 
 function setMode(mode, el) {
   currentMode = mode;
@@ -391,11 +381,13 @@ function handleFiles(files) {
         if (!allDatasets.find(d => d._id === id)) {
           data._id = id; data._filename = file.name;
           if (!data.market || data.market === 'desconhecido') {
-            const fn = file.name.toLowerCase();
-            if (fn.includes('cesta') || fn.includes('3pt'))       data.market = '3pts';
-            else if (fn.includes('reb') || fn.includes('rebote')) data.market = 'rebotes';
-            else if (fn.includes('ast') || fn.includes('assist')) data.market = 'assistências';
-            else if (fn.includes('pts') || fn.includes('pont'))   data.market = 'pontos';
+            // Normaliza: minúsculo + remove acentos para comparação segura
+            const fn = file.name.toLowerCase()
+              .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            if (fn.includes('3pt') || fn.includes('cesta'))          data.market = '3pts';
+            else if (fn.includes('assistencia') || fn.includes('ast')) data.market = 'assistências';
+            else if (fn.includes('rebote') || fn.includes('reb'))      data.market = 'rebotes';
+            else if (fn.includes('ponto') || fn.includes('pts'))       data.market = 'pontos';
             else data.market = detectMarketByContent(data.players);
           }
           allDatasets.push(data);
@@ -808,7 +800,26 @@ function renderLive() {
   }).join('');
 }
 
-document.getElementById('live-badge').style.display = 'none';
+function onFirebaseReady() {
+  initFirebase();
+  document.getElementById('live-badge').style.display = 'none';
+  // Verifica sessão compartilhada na URL após Firebase pronto
+  const sessaoId = new URLSearchParams(window.location.search).get('s');
+  if (!sessaoId) return;
+  document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
+  _db.ref('sessoes/' + sessaoId).get().then(snap => {
+    const data = snap.val();
+    if (!data || !data.datasets) {
+      document.getElementById('drop-area').innerHTML = '<p style="color:#e53935">Link expirado ou inválido.</p>';
+      return;
+    }
+    allDatasets = data.datasets;
+    document.getElementById('drop-area').innerHTML = `<p id="drop-label">${allDatasets.length} arquivo${allDatasets.length > 1 ? 's' : ''} carregado${allDatasets.length > 1 ? 's' : ''}</p>`;
+    document.getElementById('drop-area').classList.add('loaded');
+    document.getElementById('share-btn').style.display = 'inline-flex';
+    renderManual();
+  });
+}
 </script>
 </body>
 </html>
