@@ -1,0 +1,17 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: Segoe UI, system-ui, -apple-system, sans-serif;
+  background: #0f0f13;
+  color: #e8e8e8;
+  min-height: 100vh;
+}
+
+button,
+input {
+  font-family: inherit;
+}
