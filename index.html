@@ -344,10 +344,10 @@ function setEVMode(mode, el) {
 
 // Aplica o modo EV atual nos cards (season ou pinnacle)
 function applyEVModeToCards() {
-  document.querySelectorAll('[data-player][data-ev-season]').forEach(card => {
-    const ev = evMode === 'pinnacle'
+  document.querySelectorAll('[data-player]').forEach(card => {
+    const ev = evMode === 'draftkings'
       ? parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN')
-      : parseFloat(card.getAttribute('data-ev-season') || 'NaN');
+      : parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
 
     if (isNaN(ev)) return;
 
@@ -361,13 +361,13 @@ function applyEVModeToCards() {
       evEl.className = 'line-stat-val ev-val ' + sigCls + (evMode === 'pinnacle' ? ' pinnacle' : '');
     }
     if (signalEl) {
-      signalEl.textContent = evMode === 'pinnacle' ? (sigTxt + ' 📌') : sigTxt;
-      signalEl.className = 'ev-signal ' + sigCls + (evMode === 'pinnacle' && ev > 3 ? ' pinnacle' : '');
+      signalEl.textContent = evMode === 'draftkings' ? (sigTxt + ' 📌') : sigTxt;
+      signalEl.className = 'ev-signal ' + sigCls + (evMode === 'draftkings' && ev > 3 ? ' pinnacle' : '');
     }
 
     card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-pinnacle', 'high-value');
     if (ev > 3) {
-      card.classList.add(evMode === 'pinnacle' ? 'ev-plus-pinnacle' : 'ev-plus');
+      card.classList.add(evMode === 'draftkings' ? 'ev-plus-pinnacle' : 'ev-plus');
       if (parseFloat(card.getAttribute('data-odd')) >= oddThreshold) card.classList.add('high-value');
     } else if (ev < -3) {
       card.classList.add('ev-minus');
@@ -814,12 +814,20 @@ async function loadSeasonStats(players) {
   if (statusEl) { statusEl.textContent = '⏳ Buscando stats da temporada...'; statusEl.style.display = 'block'; }
   const unique = [...new Map(players.map(p => [p.player + '|' + p.market, p])).values()];
   let done = 0;
-  const results = await Promise.all(unique.map(async (p) => {
-    const logs = await fetchNBAGameLogs(p.player);
-    done++;
-    if (statusEl) statusEl.textContent = `⏳ Stats da temporada: ${done}/${unique.length}...`;
-    return { player: p.player, market: p.market, logs };
-  }));
+  // Processa em batches de 5 com delay para evitar rate limit do Worker
+  const results = [];
+  const batchSize = 5;
+  for (let i = 0; i < unique.length; i += batchSize) {
+    const batch = unique.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(async (p) => {
+      const logs = await fetchNBAGameLogs(p.player);
+      done++;
+      if (statusEl) statusEl.textContent = `⏳ Stats da temporada: ${done}/${unique.length}...`;
+      return { player: p.player, market: p.market, logs };
+    }));
+    results.push(...batchResults);
+    if (i + batchSize < unique.length) await new Promise(r => setTimeout(r, 300));
+  }
   for (const { player, market, logs } of results) {
     if (logs) updatePlayerCards(player, market, logs);
   }
