@@ -605,6 +605,7 @@ function clearData() {
   document.getElementById('file-input').value = '';
   saveToStorage();
   updateImportBar();
+  _statsAlreadyLoaded = false; // novos arquivos = precisa recarregar stats
   resetMetrics();
 }
 
@@ -631,6 +632,7 @@ function copiarLink() {
 }
 
 const NBA_CACHE = {}, NBA_ID_CACHE = {};
+let _statsAlreadyLoaded = false; // evita recarregar ao trocar filtro/aba
 const SEASON = '2025-26';
 const WORKER = 'https://round-rain-9e80.vinipaio.workers.dev';
 let _allPlayersCache = null;
@@ -1122,7 +1124,7 @@ function renderManual() {
   document.getElementById('cnt-total').textContent  = totalLines;
   document.getElementById('best-ev').textContent    = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
   document.getElementById('last-update').textContent = latestScrapedAt ? new Date(latestScrapedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—';
-  loadSeasonStats(allPlayers);
+  if (!_statsAlreadyLoaded) { _statsAlreadyLoaded = true; loadSeasonStats(allPlayers); } else { renderTopEVFromDOM(); }
 }
 
 function hasEVPlus(p) {
