@@ -372,16 +372,26 @@ function applyEVModeToCards() {
 
     const evEl     = card.querySelector('.ev-val');
     const signalEl = card.querySelector('.ev-signal');
+    const dkRefEl  = card.querySelector('.dk-ref');
     const sigCls   = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
-    const sigTxt   = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
+    const sigTxt   = ev > 3 ? 'EV+' : ev < -3 ? 'EV-' : 'neutro';
 
     if (evEl) {
       evEl.textContent = (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
       evEl.className   = 'line-stat-val ev-val ' + sigCls + (isDK ? ' pinnacle' : '');
     }
     if (signalEl) {
-      signalEl.textContent = isDK ? sigTxt + ' 📌' : sigTxt;
+      signalEl.textContent = isDK ? sigTxt + ' DK' : sigTxt;
       signalEl.className   = 'ev-signal ' + sigCls + (isDK && ev > 3 ? ' dk' : '');
+    }
+    if (dkRefEl) {
+      if (isDK) {
+        const oddDK = parseFloat(card.getAttribute('data-odd-dk') || 'NaN');
+        dkRefEl.style.display = 'flex';
+        dkRefEl.querySelector('.dk-ref-val').textContent = isNaN(oddDK) ? '-' : oddDK.toFixed(2);
+      } else {
+        dkRefEl.style.display = 'none';
+      }
     }
 
     const odd = parseFloat(card.getAttribute('data-odd'));
@@ -472,11 +482,19 @@ async function loadRefOdds() {
       }
 
       if (refOdd) {
-        const probDK  = 1 / refOdd;
-        const evDK    = parseFloat(((probDK * oddB365 - 1) * 100).toFixed(1));
-        card.setAttribute('data-ev-pinnacle', evDK);
+        // Cálculo correto: DraftKings tem ~6% de margem em player props
+        // Removemos a margem para obter a probabilidade fair implícita
+        // e calculamos o EV da odd Bet365 contra essa prob fair
+        const DK_MARGIN = 1.06;
+        const probFairDK = (1 / refOdd) / DK_MARGIN;
+        const evDK = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
+
+        // Sanity check: EV > 60% é provável mismatch de linha — descarta
+        const evDKSafe = Math.abs(evDK) > 60 ? NaN : evDK;
+        card.setAttribute('data-ev-pinnacle', isNaN(evDKSafe) ? 'NaN' : evDKSafe);
+        card.setAttribute('data-odd-dk', refOdd);   // guarda odd DK para exibir
         matched++;
-        console.log(`[DK] ✓ ${slug}|${market}|${lineNum} → chave: ${matchedKey} odd:${refOdd} ev:${evDK}`);
+        console.log(`[DK] ✓ ${slug}|${market}|${lineNum} → chave: ${matchedKey} oddDK:${refOdd} probFair:${(probFairDK*100).toFixed(1)}% oddB365:${oddB365} ev:${evDK}`);
       } else {
         card.setAttribute('data-ev-pinnacle', 'NaN');
         unmatched++;
@@ -997,6 +1015,7 @@ function renderManual() {
         <div class="line-stats">
           <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">${(prob*100).toFixed(1)}%</span></div>
           <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ev-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
+          <div class="line-stat dk-ref" style="display:none"><span class="line-stat-label">DraftKings ref.</span><span class="line-stat-val dk-ref-val" style="color:#4a9eff">-</span></div>
           <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val ${kelly>0?'pos':''}">${kelly>0?kelly+'%':'—'}</span></div>
           <div class="line-stat"><span class="line-stat-label">Hit rate temporada</span><span class="line-stat-val season-hr" style="color:#555">carregando...</span></div>
         </div>
