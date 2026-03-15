@@ -422,10 +422,13 @@ function applyEVModeToCards() {
     const odd = parseFloat(card.getAttribute('data-odd'));
     card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
 
-    if (ev > 3) {
+    // Cap: EV > 60% no modo DK = anomalia, não destaca como EV+
+    const evCapped = isDK ? Math.min(ev, 60) : ev;
+
+    if (evCapped > 3) {
       card.classList.add(isDK ? 'ev-plus-dk' : 'ev-plus');
       if (odd >= oddThreshold) card.classList.add('high-value');
-    } else if (ev < -3) {
+    } else if (evCapped < -3) {
       card.classList.add('ev-minus');
     }
   });
@@ -618,16 +621,31 @@ async function loadRefOdds() {
 
       if (bestMatch && bestDist <= 1.0) {
         // ── Comparação direta: usa prob fair da linha DK equivalente ──────────
-        // prob_fair_DK = (1/dkOdd) / DK_MARGIN
-        // EV_B365 = prob_fair_DK * oddB365 - 1
-        const probFairDK = (1 / bestMatch.odd) / DK_MARGIN;
-        evDK       = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
-        dkOddUsed  = bestMatch.odd;
-        dkLineUsed = bestMatch.line;
-        method     = 'direct';
-        matchedDirect++;
-      } else {
-        // ── Fallback Poisson: calibra lambda pelas linhas DK disponíveis ──────
+        // Validação de sanidade: se as odds forem muito divergentes, não é comparável
+        // Ex: DK Over 29.5 @ 1.04 vs B365 30+ @ 29.00 = anomalia, não EV real
+        const oddRatio = oddB365 / bestMatch.odd;
+        if (oddRatio > 4.0) {
+          // Odds muito divergentes — provavelmente linhas com contextos diferentes
+          // Usa Poisson com todas as linhas DK disponíveis ao invés
+          if (dkLines.length >= 2) {
+            // cai no fallback Poisson abaixo
+          } else {
+            card.setAttribute('data-ev-pinnacle', 'NaN');
+            unmatched++;
+            return;
+          }
+        } else {
+          const probFairDK = (1 / bestMatch.odd) / DK_MARGIN;
+          evDK       = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
+          dkOddUsed  = bestMatch.odd;
+          dkLineUsed = bestMatch.line;
+          method     = 'direct';
+          matchedDirect++;
+        }
+      }
+
+      // Fallback Poisson (também usado quando oddRatio > 4.0)
+      if (!method) {
         // Usa as linhas do DK para calibrar o lambda e extrapola para a linha B365
         if (dkLines.length >= 2) {
           const mid = Math.floor(dkLines.length / 2);
@@ -1206,6 +1224,15 @@ function renderTopEVFromDOM() {
     if (isDK) {
       ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
       if (isNaN(ev)) return;
+      // Cap: EV > 60% no modo DK = anomalia de matching (odds incompatíveis)
+      if (ev > 60) return;
+      // Descarta linhas com menos de 5 hits na temporada — linhas exóticas irreais
+      // Ex: Donovan Mitchell 50+ Pts @ 26.00 — 0/59 temp. = nunca aconteceu
+      const hr = card.getAttribute('data-hr') || '';
+      if (hr) {
+        const hits = parseInt(hr.split('/')[0]);
+        if (!isNaN(hits) && hits < 5) return;
+      }
     } else {
       ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
     }
