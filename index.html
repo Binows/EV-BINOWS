@@ -247,7 +247,7 @@
     </div>
     <div class="top-ev" id="top-ev-box">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
-        <div class="top-ev-title" style="margin-bottom:0">🏆 maiores EV+ desta rodada</div>
+        <div class="top-ev-title" style="margin-bottom:0;cursor:pointer;display:flex;align-items:center;gap:8px;" onclick="toggleRanking()">🏆 maiores EV+ desta rodada <span id="ranking-toggle" style="font-size:10px;color:#444;transition:transform 0.2s;display:inline-block;">▲</span></div>
         <div style="display:flex;gap:4px;align-items:center">
           <span style="font-size:10px;color:#555;margin-right:2px">qualidade mín.</span>
           <button class="quality-filter-btn" data-stars="3" onclick="setQualityFilter(3)"
@@ -310,6 +310,14 @@ function onThresholdChange(val) {
   oddThreshold = n;
   document.getElementById('threshold-display').textContent = n.toFixed(2);
   applyHighValueHighlight();
+}
+
+function toggleRanking() {
+  const list = document.getElementById('top-ev-list');
+  const toggle = document.getElementById('ranking-toggle');
+  const isOpen = list.style.display !== 'none';
+  list.style.display = isOpen ? 'none' : '';
+  toggle.style.transform = isOpen ? 'rotate(180deg)' : '';
 }
 
 function toggleImport(forceOpen) {
