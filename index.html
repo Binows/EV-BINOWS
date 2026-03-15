@@ -338,7 +338,7 @@ async function fetchNBAPlayerID(name) {
   if (NBA_ID_CACHE[name]) return NBA_ID_CACHE[name];
   try {
     if (!_allPlayersCache) {
-      const res = await fetch(`${WORKER}/nba/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=1`);
+      const res = await fetch(`${WORKER}/nba/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=0`);
       _allPlayersCache = await res.json();
     }
     const rows = _allPlayersCache.resultSets[0].rowSet;
