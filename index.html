@@ -1128,7 +1128,7 @@ function renderManual() {
 
     if (linesEntries.length < 2) return '';
     const sorted = linesEntries.map(([label, odd]) => ({ label, odd, k: parseInt(label) - 1 }))
-      .filter(x => !isNaN(x.k) && x.odd >= 1.01).sort((a, b) => a.k - b.k);
+      .filter(x => !isNaN(x.k) && x.odd >= 1.01 && x.odd < 36).sort((a, b) => a.k - b.k);
     let lambda = null;
     const allOdds = sorted.map(x => x.odd);
     const margin = calcDynamicMargin(allOdds);
@@ -1191,7 +1191,7 @@ function renderManual() {
 
 function hasEVPlus(p) {
   const sorted = Object.entries(p.lines || {}).map(([label, odd]) => ({ odd, k: parseInt(label) - 1 }))
-    .filter(x => !isNaN(x.k) && x.odd >= 1.01).sort((a, b) => a.k - b.k);
+    .filter(x => !isNaN(x.k) && x.odd >= 1.01 && x.odd < 36).sort((a, b) => a.k - b.k);
   if (sorted.length < 2) return false;
   const allOdds = sorted.map(x => x.odd);
   const margin = calcDynamicMargin(allOdds);
