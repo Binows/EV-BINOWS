@@ -658,7 +658,7 @@ function detectMarketByContent(players) {
   return 'pontos';
 }
 
-const MKT_NAMES = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', '3pts': '3Pts', desconhecido: '?' };
+const MKT_NAMES = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', '3pts': '3Pts', 'duplo-duplo': 'DD', 'triplo-duplo': 'TD', desconhecido: '?' };
 
 function handleDrop(e) {
   e.preventDefault();
@@ -688,6 +688,23 @@ function handleFiles(files) {
             else data.market = detectMarketByContent(data.players);
           }
           allDatasets.push(data);
+          // Extrai duplo/triplo duplo como datasets separados
+          if (data.binaryPlayers && data.binaryPlayers.length > 0) {
+            const ddPlayers = data.binaryPlayers.filter(p => p.market === 'duplo-duplo');
+            const tdPlayers = data.binaryPlayers.filter(p => p.market === 'triplo-duplo');
+            if (ddPlayers.length > 0) {
+              allDatasets.push({ _id: id + '_dd', _filename: file.name, market: 'duplo-duplo',
+                scrapedAt: data.scrapedAt, gameName: data.gameName, url: data.url,
+                players: ddPlayers.map(p => ({ player: p.player, last5: p.last5,
+                  lines: { 'Sim': p.oddSim }, oddNao: p.oddNao, binary: true })) });
+            }
+            if (tdPlayers.length > 0) {
+              allDatasets.push({ _id: id + '_td', _filename: file.name, market: 'triplo-duplo',
+                scrapedAt: data.scrapedAt, gameName: data.gameName, url: data.url,
+                players: tdPlayers.map(p => ({ player: p.player, last5: p.last5,
+                  lines: { 'Sim': p.oddSim }, oddNao: p.oddNao, binary: true })) });
+            }
+          }
         }
         loaded++;
         if (loaded === files.length) { updateChips(); renderManual(); }
@@ -712,8 +729,9 @@ function updateChips() {
   document.getElementById('share-btn').style.display = 'inline-flex';
   chips.innerHTML = allDatasets.map((d, i) => {
     const mkt = MKT_NAMES[d.market] || '?';
-    return `<span style="display:inline-flex;align-items:center;gap:5px;background:#2a2a3e;border:1px solid #3a3a4e;border-radius:20px;padding:3px 10px;font-size:11px;color:#aaa">
-      <span style="color:#4caf50;font-weight:600">${mkt}</span> ${d.players.length}j
+    const gameShort = d.gameName ? ' · ' + d.gameName.split(' x ')[0].split(' ').slice(-1)[0] + ' x ' + (d.gameName.split(' x ')[1] || '').split(' ').slice(-1)[0] : '';
+    return `<span title="${d.gameName || ''}" style="display:inline-flex;align-items:center;gap:5px;background:#2a2a3e;border:1px solid #3a3a4e;border-radius:20px;padding:3px 10px;font-size:11px;color:#aaa">
+      <span style="color:#4caf50;font-weight:600">${mkt}</span> ${d.players.length}j${gameShort}
       <span onclick="removeDataset(${i})" style="cursor:pointer;color:#555;margin-left:2px">✕</span>
     </span>`;
   }).join('');
@@ -740,6 +758,7 @@ function clearData() {
   document.getElementById('top-ev-box').style.display = 'none';
   document.getElementById('share-box').style.display = 'none';
   document.getElementById('file-input').value = '';
+  saveToStorage();
   resetMetrics();
 }
 
@@ -941,6 +960,61 @@ function updatePlayerCards(playerName, market, logs) {
 
 function playerSlug(name) { return name.toLowerCase().replace(/[^a-z0-9]/g, '-'); }
 
+function saveToStorage() {
+  try { localStorage.setItem('ev_datasets', JSON.stringify(allDatasets)); } catch(e) {}
+}
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem('ev_datasets');
+    if (!raw) return false;
+    const datasets = JSON.parse(raw);
+    if (!Array.isArray(datasets) || datasets.length === 0) return false;
+    allDatasets = datasets;
+    return true;
+  } catch(e) { return false; }
+}
+
+// Lê do browser.storage (extensão) e sincroniza com localStorage
+async function syncFromExtension() {
+  try {
+    if (typeof browser === 'undefined' || !browser.storage) return false;
+    const data = await browser.storage.local.get('ev_datasets');
+    if (!data.ev_datasets) return false;
+    const datasets = JSON.parse(data.ev_datasets);
+    if (!Array.isArray(datasets) || datasets.length === 0) return false;
+    // Só atualiza se tiver dados mais novos
+    const latestExt = Math.max(...datasets.map(d => new Date(d.scrapedAt || 0).getTime()));
+    const latestLocal = allDatasets.length
+      ? Math.max(...allDatasets.map(d => new Date(d.scrapedAt || 0).getTime()))
+      : 0;
+    if (latestExt <= latestLocal) return false;
+    allDatasets = datasets;
+    localStorage.setItem('ev_datasets', data.ev_datasets);
+    return true;
+  } catch(e) { return false; }
+}
+
+// Polling: verifica a cada 30s se a extensão atualizou os dados
+function startExtensionSync() {
+  setInterval(async () => {
+    const updated = await syncFromExtension();
+    if (updated) {
+      console.log('[Sync] Dados atualizados pela extensão — re-renderizando...');
+      refLoaded = false; // reseta cache DK para recalcular
+      updateChips();
+      renderManual();
+      // Mostra notificação discreta
+      const el = document.getElementById('nba-status');
+      if (el) {
+        el.textContent = '🔄 Dados atualizados automaticamente pela extensão';
+        el.style.display = 'block';
+        setTimeout(() => el.style.display = 'none', 3000);
+      }
+    }
+  }, 30000); // checa a cada 30 segundos
+}
+
 // FIX #3: renderTopEVFromDOM lê o EV correto dependendo do modo atual
 function renderTopEVFromDOM() {
   const isDK = evMode === 'dk';
@@ -1008,6 +1082,49 @@ function renderManual() {
   const html = allPlayers.map(p => {
     const mkt = p.market || 'desconhecido', mktLabel = MKT_NAMES[mkt] || mkt;
     const linesEntries = Object.entries(p.lines || {});
+
+    // Mercado binário (duplo/triplo duplo) — renderiza diferente
+    if (p.binary) {
+      const oddSim = p.lines['Sim'];
+      const oddNao = p.oddNao;
+      if (!oddSim) return '';
+      const margin   = oddNao ? 1 / (1/oddSim + 1/oddNao) : 1.08;
+      const probFair = (1 / oddSim) / (oddNao ? (1/oddSim + 1/oddNao) : 1.08);
+      const ev       = calcEV(probFair, oddSim);
+      const kelly    = calcKelly(probFair, oddSim);
+      totalLines++;
+      if (ev > 3) { evPlusCount++; playerHasEV = true; topEVItems.push({ player: p.player, market: mkt, mktLabel, label: 'Sim', odd: oddSim, ev, kelly, lineNum: 0, hr: '' }); }
+      if (ev > bestEV) bestEV = ev;
+      const isHighValue = ev > 3 && oddSim >= oddThreshold;
+      const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
+      const hvCls  = isHighValue ? ' high-value' : '';
+      const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
+      const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
+      const gameLabel = p.gameName ? `<span style="font-size:10px;color:#444;margin-left:6px">${p.gameName}</span>` : '';
+      return \`<div class="player-card\${playerHasEV ? ' has-ev' : ''}">
+        <div class="player-header">
+          <div class="player-name">\${p.player}\${gameLabel}</div>
+          <div class="player-meta"><span class="market-badge">\${mkt}</span></div>
+        </div>
+        <div class="lines">
+          <div class="line-card \${cls}\${hvCls}"
+            data-player="\${playerSlug(p.player)}" data-name="\${p.player}" data-market="\${mkt}" data-mktlabel="\${mktLabel}"
+            data-label="Sim" data-line="0" data-odd="\${oddSim}" data-prob="\${probFair.toFixed(4)}"
+            data-ev="\${ev}" data-ev-season="\${ev}" data-ev-pinnacle="NaN" data-kelly="\${kelly}" data-hr="">
+            <div class="line-label">Sim \${mktLabel}</div>
+            <div class="line-odd">\${oddSim.toFixed(2)}</div>
+            <div class="line-stats">
+              <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">\${(probFair*100).toFixed(1)}%</span></div>
+              <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ev-val \${sigCls}">\${ev>0?'+':''}\${ev}%</span></div>
+              \${oddNao ? \`<div class="line-stat"><span class="line-stat-label">Odd Não</span><span class="line-stat-val">\${oddNao.toFixed(2)}</span></div>\` : ''}
+              <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val \${kelly>0?'pos':''}">\${kelly>0?kelly+'%':'—'}</span></div>
+            </div>
+            <span class="ev-signal \${sigCls}">\${sigTxt}</span>
+          </div>
+        </div>
+      </div>\`;
+    }
+
     if (linesEntries.length < 2) return '';
     const sorted = linesEntries.map(([label, odd]) => ({ label, odd, k: parseInt(label) - 1 }))
       .filter(x => !isNaN(x.k) && x.odd >= 1.01).sort((a, b) => a.k - b.k);
@@ -1063,6 +1180,7 @@ function renderManual() {
   list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
   topEVItems.sort((a, b) => b.ev - a.ev);
   renderTopEV(topEVItems);
+  saveToStorage();
   document.getElementById('cnt-pos').textContent    = evPlusCount;
   document.getElementById('cnt-total').textContent  = totalLines;
   document.getElementById('best-ev').textContent    = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
@@ -1201,9 +1319,21 @@ function renderLive() {
 
 document.getElementById('live-badge').style.display = 'none';
 
+// Restaura datasets da sessão anterior automaticamente
 (function() {
   const sessaoId = new URLSearchParams(window.location.search).get('s');
-  if (!sessaoId) return;
+  if (!sessaoId) {
+    // Tenta primeiro a extensão, depois localStorage
+    syncFromExtension().then(fromExt => {
+      if (fromExt || loadFromStorage()) {
+        updateChips();
+        renderManual();
+        console.log('[Storage] Restaurados', allDatasets.length, 'datasets');
+      }
+    });
+    startExtensionSync(); // inicia polling da extensão
+    return;
+  }
   document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
   _db.ref('sessoes/' + sessaoId).get().then(snap => {
     const data = snap.val();
