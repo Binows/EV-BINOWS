@@ -1090,7 +1090,7 @@ function renderTopEV(topList) {
     const qualityColor = quality >= 4 ? '#4caf50' : quality >= 3 ? '#c8a84b' : quality >= 2 ? '#888' : '#444';
     const qualityBorder = `border-left-color:${qualityColor}`;
 
-    return `<div class="top-ev-item${dkClass}${isHighValue ? ' high-value' : ''}"
+    return `<div class="top-ev-item${isHighValue ? ' high-value' : ''}"
         data-odd="${item.odd}" data-quality="${quality}" style="${qualityBorder}">
       <span class="top-ev-rank">${i + 1}</span>
       <span class="top-ev-player">${item.player}</span>
