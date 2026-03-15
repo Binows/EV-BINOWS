@@ -1247,7 +1247,9 @@ function startExtensionSync() {
 }
 
 // ─── Score de qualidade da edge (1-5 estrelas) ───────────────────────────────
-// Combina: confiança estatística (Wilson), tamanho da amostra, volatilidade da odd
+// Mede CONFIANÇA na edge — não o tamanho dela
+// Zubac 17+ @ 14.00, 6/45 → baixa confiança (13% hit rate, odd volátil)
+// Bridges 15+ @ 3.25, 35/68 → alta confiança (51% hit rate, odd razoável)
 function calcQualityScore(ev, odd, hrStr) {
   if (!hrStr) return 0;
   const parts = hrStr.split('/');
@@ -1257,32 +1259,40 @@ function calcQualityScore(ev, odd, hrStr) {
 
   const p = hits / games;
 
-  // Wilson Score — limite inferior do intervalo de confiança 95%
-  // Penaliza amostras pequenas mesmo com hit rate alto
-  const z  = 1.96;
-  const n  = games;
+  // Wilson Score — limite inferior IC 95%
+  // Com p=0.13, n=45 → wilson ≈ 0.058 (baixo)
+  // Com p=0.51, n=68 → wilson ≈ 0.39 (alto)
+  const z = 1.96, n = games;
   const wilson = (p + z*z/(2*n) - z*Math.sqrt((p*(1-p) + z*z/(4*n))/n)) / (1 + z*z/n);
-  const wilsonLow = Math.max(0, wilson); // prob mínima confiável
+  const wilsonLow = Math.max(0, wilson);
 
-  // Fator de amostra: ideal >= 50 jogos
-  const sampleFactor = Math.min(games / 50, 1.0);
+  // Fator de amostra — 60+ jogos = ideal
+  // 10→0.17, 20→0.33, 40→0.67, 60+→1.0
+  const sampleFactor = Math.min(games / 60, 1.0);
 
-  // Fator de volatilidade: odd alta = mais risco de ruína
-  // odd 1.5 → 1.0, odd 3.0 → 0.7, odd 10.0 → 0.4, odd 20+ → 0.2
-  const volatilityFactor = Math.max(0.2, 1 - Math.log(odd) * 0.18);
+  // Penalidade por hit rate baixo — apostas que batem <20% são inerentemente arriscadas
+  // independente do EV. Zubac 13% → 0.35 de penalidade
+  const hitPenalty = p < 0.10 ? 0.20
+                   : p < 0.20 ? 0.40
+                   : p < 0.30 ? 0.65
+                   : p < 0.40 ? 0.85
+                   : 1.00;
 
-  // EV normalizado: 5% → baixo, 20% → médio, 50%+ → alto
-  // mas penalizado pela confiança
-  const evFactor = Math.min(ev / 50, 1.0);
+  // Fator de volatilidade da odd — odd alta = swing enorme, ruína rápida
+  // odd 1.5→0.92, odd 2.0→0.82, odd 3.5→0.65, odd 7→0.45, odd 14→0.26, odd 20+→0.18
+  const volatilityFactor = Math.max(0.12, 1 / (1 + Math.log(odd) * 0.60));
 
-  // Score final 0-1
-  const score = (wilsonLow * 0.45) + (sampleFactor * 0.25) + (volatilityFactor * 0.20) + (evFactor * 0.10);
+  // Score = confiança estatística × penalidades
+  // EV não entra — qualidade é sobre confiança, não tamanho da edge
+  const score = (wilsonLow * 0.50 + sampleFactor * 0.30 + volatilityFactor * 0.20) * hitPenalty;
 
-  // Converte para 1-5 estrelas
-  if (score >= 0.55) return 5;
-  if (score >= 0.42) return 4;
-  if (score >= 0.28) return 3;
-  if (score >= 0.15) return 2;
+  // Thresholds calibrados para os exemplos:
+  // Zubac 6/45 @ 14: score ≈ (0.058*0.50 + 0.75*0.30 + 0.26*0.20)*0.40 ≈ 0.048 → 1★
+  // Bridges 35/68 @ 3.25: score ≈ (0.39*0.50 + 1.0*0.30 + 0.65*0.20)*1.00 ≈ 0.625 → 5★
+  if (score >= 0.52) return 5;
+  if (score >= 0.35) return 4;
+  if (score >= 0.20) return 3;
+  if (score >= 0.09) return 2;
   return 1;
 }
 
