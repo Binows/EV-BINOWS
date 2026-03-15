@@ -167,11 +167,11 @@
   </div>
 </div>
 
-<script type="module">
-import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js';
-import { getDatabase, ref, set, get } from 'https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js';
-
-const firebaseConfig = {
+<!-- Firebase via CDN compat (sem module, sem escopo isolado) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+firebase.initializeApp({
   apiKey: "AIzaSyBp5jjj0SaFuN3xK_ZCsHBknntLwP7LG48",
   authDomain: "ev-binows.firebaseapp.com",
   databaseURL: "https://ev-binows-default-rtdb.firebaseio.com",
@@ -179,36 +179,30 @@ const firebaseConfig = {
   storageBucket: "ev-binows.firebasestorage.app",
   messagingSenderId: "769525305200",
   appId: "1:769525305200:web:8d1fbdab5f97577a55c9b5"
-};
+});
+const _db = firebase.database();
 
-const app = initializeApp(firebaseConfig);
-const db  = getDatabase(app);
-
-window._fbSet = (path, data) => set(ref(db, path), data);
-window._fbGet = (path) => get(ref(db, path)).then(s => s.val());
-
-// Verifica se há sessão na URL ao carregar
-const urlParams = new URLSearchParams(window.location.search);
-const sessaoId  = urlParams.get('s');
-if (sessaoId) {
-  document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
-  window._fbGet('sessoes/' + sessaoId).then(data => {
-    if (!data || !data.datasets) {
-      document.getElementById('drop-area').innerHTML = '<p style="color:#e53935">Link expirado ou inválido.</p>';
-      return;
-    }
-    window.allDatasets = data.datasets;
-    updateChips();
-    renderManual();
-  });
-}
-</script>
-
-<script>
 let currentMode  = 'manual';
 let activeFilter = 'todos';
 let allDatasets  = [];
 let allLiveBets  = [];
+
+// Verifica sessão compartilhada na URL
+(function() {
+  const sessaoId = new URLSearchParams(window.location.search).get('s');
+  if (!sessaoId) return;
+  document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
+  _db.ref('sessoes/' + sessaoId).get().then(snap => {
+    const data = snap.val();
+    if (!data || !data.datasets) {
+      document.getElementById('drop-area').innerHTML = '<p style="color:#e53935">Link expirado ou inválido.</p>';
+      return;
+    }
+    allDatasets = data.datasets;
+    updateChips();
+    renderManual();
+  });
+})();
 
 function setMode(mode, el) {
   currentMode = mode;
@@ -362,9 +356,9 @@ async function compartilhar() {
   const btn = document.getElementById('share-btn');
   btn.textContent = '⏳ Salvando...'; btn.disabled = true;
   try {
-    const id      = Math.random().toString(36).substr(2, 8);
-    const expiry  = Date.now() + 24 * 60 * 60 * 1000;
-    await window._fbSet('sessoes/' + id, { datasets: allDatasets, expiry });
+    const id     = Math.random().toString(36).substr(2, 8);
+    const expiry = Date.now() + 24 * 60 * 60 * 1000;
+    await _db.ref('sessoes/' + id).set({ datasets: allDatasets, expiry });
     const link = window.location.origin + window.location.pathname + '?s=' + id;
     document.getElementById('share-link').textContent = link;
     document.getElementById('share-expiry').textContent = 'Expira em 24h';
@@ -380,11 +374,9 @@ function copiarLink() {
   setTimeout(() => document.querySelector('.copy-btn').textContent = 'Copiar link', 2000);
 }
 
-// NBA STATS
-const NBA_CACHE    = {};
-const NBA_ID_CACHE = {};
-const SEASON       = '2024-25';
-const WORKER       = 'https://round-rain-9e80.vinipaio.workers.dev';
+const NBA_CACHE = {}, NBA_ID_CACHE = {};
+const SEASON = '2024-25';
+const WORKER = 'https://round-rain-9e80.vinipaio.workers.dev';
 let _allPlayersCache = null;
 
 async function fetchNBAPlayerID(name) {
@@ -396,8 +388,7 @@ async function fetchNBAPlayerID(name) {
     }
     const rows = _allPlayersCache.resultSets[0].rowSet;
     const hdrs = _allPlayersCache.resultSets[0].headers;
-    const idIdx   = hdrs.indexOf('PERSON_ID');
-    const nameIdx = hdrs.indexOf('DISPLAY_FIRST_LAST');
+    const idIdx = hdrs.indexOf('PERSON_ID'), nameIdx = hdrs.indexOf('DISPLAY_FIRST_LAST');
     const nameLower = name.toLowerCase().trim();
     let match = rows.find(r => r[nameIdx].toLowerCase() === nameLower);
     if (!match) {
@@ -418,11 +409,8 @@ async function fetchNBAGameLogs(playerName) {
     if (!playerId) return null;
     const res  = await fetch(`${WORKER}/nba/playergamelog?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular%20Season&PerMode=PerGame`);
     const data = await res.json();
-    const rows = data.resultSets[0].rowSet;
-    const hdrs = data.resultSets[0].headers;
-    const pts = hdrs.indexOf('PTS');
-    const reb = hdrs.indexOf('REB');
-    const ast = hdrs.indexOf('AST');
+    const rows = data.resultSets[0].rowSet, hdrs = data.resultSets[0].headers;
+    const pts = hdrs.indexOf('PTS'), reb = hdrs.indexOf('REB'), ast = hdrs.indexOf('AST');
     const fg3 = hdrs.indexOf('FG3M') !== -1 ? hdrs.indexOf('FG3M') : hdrs.indexOf('FG3_M');
     const logs = rows.map(r => ({ pts: r[pts]??0, reb: r[reb]??0, ast: r[ast]??0, fg3: fg3!==-1?(r[fg3]??0):0 }));
     NBA_CACHE[playerName] = { logs, ts: Date.now() };
@@ -548,7 +536,7 @@ function renderManual() {
       const first = sorted[0], last = sorted[sorted.length - 1];
       try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); } catch(e) {}
     }
-    const last5 = p.last5 || [], slug = playerSlug(p.player);
+    const slug = playerSlug(p.player);
     let playerHasEV = false;
 
     const lineCards = sorted.map(({ label, odd, k }) => {
@@ -623,7 +611,6 @@ function renderTopEV(topList) {
   </div>`).join('');
 }
 
-// LIVE MODE
 const BASE = WORKER + '/odds', SPORT = 'basketball_nba';
 const MARKETS = 'player_points,player_rebounds,player_assists', BOOKS = 'pinnacle,draftkings,fanduel';
 const MKT_LABEL = { player_points:'pontos', player_rebounds:'rebotes', player_assists:'assistências' };
