@@ -390,12 +390,15 @@ async function loadPinnacleOdds() {
     const evRes = await fetch(`${_BASE}/sports/${_SPORT}/events`);
     if (!evRes.ok) throw new Error('Erro ao buscar eventos');
     const events = await evRes.json();
-    const agora = new Date();
-    const jogos = events.filter(e => new Date(e.commence_time) > agora).slice(0, 6);
+    // Pega jogos do dia atual — props ficam disponíveis mesmo após início do jogo
+    const hoje = new Date().toISOString().slice(0, 10);
+    let jogos = events.filter(e => e.commence_time.slice(0, 10) === hoje).slice(0, 8);
+    if (!jogos.length) jogos = events.slice(0, 6); // fallback: jogos mais recentes
     if (!jogos.length) throw new Error('Nenhum jogo encontrado');
 
     // Mercados necessários baseados nos datasets importados
     const marketsNeeded = [...new Set(allDatasets.map(d => MKT_API[d.market]).filter(Boolean))];
+    console.log('Jogos encontrados:', jogos.length, '| Mercados:', marketsNeeded, '| Datasets:', allDatasets.length);
     if (!marketsNeeded.length) throw new Error('Nenhum mercado reconhecido');
 
     let fetched = 0;
