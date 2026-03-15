@@ -371,11 +371,15 @@ function applyEVModeToCards() {
   document.querySelectorAll('[data-player]').forEach(card => {
     // FIX 3a: no modo DK, cards sem match ficam esmaecidos (não simplesmente sumidos)
     const evPinnacle = card.getAttribute('data-ev-pinnacle');
-    if (isDK && evPinnacle === 'NaN') {
+    const oddCard = parseFloat(card.getAttribute('data-odd'));
+    if (isDK && (evPinnacle === 'NaN' || oddCard < 1.50)) {
       card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
       card.classList.add('dk-no-match');
       const signalEl = card.querySelector('.ev-signal');
-      if (signalEl) { signalEl.textContent = 'sem match DK'; signalEl.className = 'ev-signal neu'; }
+      if (signalEl) {
+        signalEl.textContent = evPinnacle === 'NaN' ? 'sem match DK' : 'odd baixa';
+        signalEl.className = 'ev-signal neu';
+      }
       return;
     }
     card.classList.remove('dk-no-match');
@@ -406,7 +410,9 @@ function applyEVModeToCards() {
         const oddDK = parseFloat(card.getAttribute('data-odd-dk') || 'NaN');
         const dkLine = card.getAttribute('data-dk-line');
         dkRefEl.style.display = 'flex';
-        const dkLabel = (!isNaN(oddDK) && dkLine) ? `${oddDK.toFixed(2)} (âncora Over ${dkLine})` : '-';
+        const method  = card.getAttribute('data-dk-method') || '';
+        const methodLabel = method === 'direct' ? '✓ direto' : method === 'poisson' ? '~ Poisson' : '';
+        const dkLabel = (!isNaN(oddDK) && dkLine) ? `${oddDK.toFixed(2)} Over ${dkLine} ${methodLabel}` : '-';
         dkRefEl.querySelector('.dk-ref-val').textContent = dkLabel;
       } else {
         dkRefEl.style.display = 'none';
@@ -485,7 +491,19 @@ function updateMetricsFromDOM() {
   document.getElementById('best-ev').textContent  = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
 }
 
-const MKT_API = { pontos: 'player_points', rebotes: 'player_rebounds', assistências: 'player_assists', '3pts': 'player_threes' };
+// Markets principais + alternativas do DK
+// A chave é o market PT (pontos/rebotes/...), o valor é array com principal + alternate
+const MKT_API = {
+  pontos:       ['player_points',    'player_points_alternate'],
+  rebotes:      ['player_rebounds',  'player_rebounds_alternate'],
+  assistências: ['player_assists',   'player_assists_alternate'],
+  '3pts':       ['player_threes',    'player_threes_alternate'],
+};
+
+// Mapa reverso: market key da API → market PT
+const MKT_API_REVERSE = {};
+for (const [pt, keys] of Object.entries(MKT_API))
+  for (const k of keys) MKT_API_REVERSE[k] = pt;
 
 async function loadRefOdds() {
   if (refLoaded) { applyEVModeToCards(); return; }
@@ -502,7 +520,10 @@ async function loadRefOdds() {
     if (!jogos.length) jogos = events.slice(0, 6);
     if (!jogos.length) throw new Error('Nenhum jogo encontrado');
 
-    const marketsNeeded = [...new Set(allDatasets.map(d => MKT_API[d.market]).filter(Boolean))];
+    // Monta lista de markets necessários (principal + alternate) com base nos datasets importados
+    const marketsNeeded = [...new Set(
+      allDatasets.flatMap(d => MKT_API[d.market] || []).filter(Boolean)
+    )];
     console.log('[DK] Jogos:', jogos.length, '| Mercados:', marketsNeeded, '| Datasets:', allDatasets.length);
     if (!marketsNeeded.length) throw new Error('Nenhum mercado reconhecido');
 
@@ -518,12 +539,16 @@ async function loadRefOdds() {
         if (!dk) { console.warn('[DK] bookmaker não encontrado no jogo', ev.id); continue; }
 
         for (const mkt of dk.markets) {
-          const marketPT = Object.entries(MKT_API).find(([,v]) => v === mkt.key)?.[0];
+          const marketPT = MKT_API_REVERSE[mkt.key];
           if (!marketPT) continue;
           for (const out of mkt.outcomes) {
             if (out.name !== 'Over') continue;
+            // Chave: slug|market|linha — ex: "evan-mobley|assistências|4.5"
             const key = playerSlug(out.description) + '|' + marketPT + '|' + out.point;
-            refCache[key] = out.price;
+            // Guarda a melhor odd disponível para cada linha
+            if (!refCache[key] || out.price > refCache[key]) {
+              refCache[key] = out.price;
+            }
           }
         }
         fetched++;
@@ -533,74 +558,135 @@ async function loadRefOdds() {
     console.log('[DK] Cache keys (primeiros 10):', Object.keys(refCache).slice(0, 10));
     console.log('[DK] Total props no cache:', Object.keys(refCache).length);
 
-    // Estratégia: DK tem UMA linha âncora por jogador/mercado (ex: Over 9.5)
-    // Calibra lambda pela âncora e avalia TODAS as linhas da Bet365
-    const lambdaDK = {};
-    const DK_MARGIN = 1.06;
-
-    for (const [key, dkOdd] of Object.entries(refCache)) {
+    // ── Nova estratégia: comparação direta por linha mais próxima ────────────────
+    //
+    // Bet365 tem "5+ Ast" → procura no DK a linha Over 4.5 (mais próxima por baixo)
+    // Se achar: EV = (prob_fair_DK) * odd_B365 - 1
+    // Se não achar linha exata: fallback para Poisson calibrado pela linha principal
+    //
+    // Agrupamento do cache DK por jogador+mercado para facilitar busca
+    const dkByPlayerMarket = {}; // slug|market → [{line, odd}]
+    for (const [key, odd] of Object.entries(refCache)) {
       const [slug, market, lineStr] = key.split('|');
-      const dkLine = parseFloat(lineStr);
-      if (isNaN(dkLine)) continue;
-
-      const probFair = (1 / dkOdd) / DK_MARGIN;
-      const k = Math.floor(dkLine);
-
-      let lo = 0.1, hi = 80;
-      for (let i = 0; i < 80; i++) {
-        const mid = (lo + hi) / 2;
-        let cdf = 0, term = Math.exp(-mid);
-        for (let j = 0; j <= k; j++) { cdf += term; term *= mid / (j + 1); }
-        const pOver = Math.max(0, Math.min(1, 1 - cdf));
-        pOver > probFair ? hi = mid : lo = mid;
-      }
-      const lambda = (lo + hi) / 2;
-      lambdaDK[slug + '|' + market] = { lambda, dkLine, dkOdd };
+      const line = parseFloat(lineStr);
+      if (isNaN(line)) continue;
+      const pmKey = slug + '|' + market;
+      if (!dkByPlayerMarket[pmKey]) dkByPlayerMarket[pmKey] = [];
+      dkByPlayerMarket[pmKey].push({ line, odd });
     }
+    // Ordena cada lista por linha crescente
+    for (const arr of Object.values(dkByPlayerMarket)) arr.sort((a, b) => a.line - b.line);
 
-    console.log('[DK] Lambdas calibrados:', Object.keys(lambdaDK).length);
+    console.log('[DK] Jogadores+mercados com linhas DK:', Object.keys(dkByPlayerMarket).length);
 
-    let matched = 0, unmatched = 0;
+    const DK_MARGIN = 1.06;
+    let matched = 0, matchedDirect = 0, matchedPoisson = 0, unmatched = 0;
+
     document.querySelectorAll('[data-player][data-line]').forEach(card => {
-      // Só processa line-cards (não player-cards containers)
       if (card.classList.contains('player-card')) return;
 
       const slug    = card.getAttribute('data-player');
       const market  = card.getAttribute('data-market');
+      // lineNum para Bet365: "5+" → 5, que corresponde a Over 4.5 no DK
       const lineNum = parseFloat(card.getAttribute('data-line'));
       const oddB365 = parseFloat(card.getAttribute('data-odd'));
 
       if (isNaN(lineNum) || isNaN(oddB365)) return;
 
-      const ref = lambdaDK[slug + '|' + market];
-      if (!ref) {
+      const pmKey = slug + '|' + market;
+      const dkLines = dkByPlayerMarket[pmKey];
+
+      if (!dkLines || dkLines.length === 0) {
         card.setAttribute('data-ev-pinnacle', 'NaN');
         unmatched++;
         return;
       }
 
-      // Calcula prob fair da linha da Bet365 com lambda calibrado pelo DK
-      // "10+" → P(X >= 10) → k = lineNum - 1
-      const k = lineNum - 1;
-      let cdf = 0, term = Math.exp(-ref.lambda);
-      for (let j = 0; j <= k; j++) { cdf += term; term *= ref.lambda / (j + 1); }
-      const probFairB365 = Math.max(0, Math.min(1, 1 - cdf));
+      // Estratégia 1: busca linha DK equivalente
+      // Bet365 "5+" = P(X >= 5) = P(X > 4) → equivalente ao DK Over 4.5
+      const targetDKLine = lineNum - 0.5;
 
-      const evDK = parseFloat(((probFairB365 * oddB365 - 1) * 100).toFixed(1));
+      // Procura linha exata ou a mais próxima (tolerância ±1.0)
+      let bestMatch = null;
+      let bestDist  = Infinity;
+      for (const dk of dkLines) {
+        const dist = Math.abs(dk.line - targetDKLine);
+        if (dist < bestDist) { bestDist = dist; bestMatch = dk; }
+      }
+
+      let evDK, dkOddUsed, dkLineUsed, method;
+
+      if (bestMatch && bestDist <= 1.0) {
+        // ── Comparação direta: usa prob fair da linha DK equivalente ──────────
+        // prob_fair_DK = (1/dkOdd) / DK_MARGIN
+        // EV_B365 = prob_fair_DK * oddB365 - 1
+        const probFairDK = (1 / bestMatch.odd) / DK_MARGIN;
+        evDK       = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
+        dkOddUsed  = bestMatch.odd;
+        dkLineUsed = bestMatch.line;
+        method     = 'direct';
+        matchedDirect++;
+      } else {
+        // ── Fallback Poisson: calibra lambda pelas linhas DK disponíveis ──────
+        // Usa as linhas do DK para calibrar o lambda e extrapola para a linha B365
+        if (dkLines.length >= 2) {
+          const mid = Math.floor(dkLines.length / 2);
+          const p1 = (1 / dkLines[0].odd) / DK_MARGIN;
+          const p2 = (1 / dkLines[mid].odd) / DK_MARGIN;
+          const k1 = Math.floor(dkLines[0].line);
+          const k2 = Math.floor(dkLines[mid].line);
+
+          const bisect = (targetP, k) => {
+            let lo = 0.1, hi = 80;
+            for (let i = 0; i < 80; i++) {
+              const m = (lo + hi) / 2;
+              let cdf = 0, t = Math.exp(-m);
+              for (let j = 0; j <= k; j++) { cdf += t; t *= m / (j + 1); }
+              (1 - cdf) > targetP ? lo = m : hi = m;
+            }
+            return (lo + hi) / 2;
+          };
+          const lambda = (bisect(p1, k1) + bisect(p2, k2)) / 2;
+
+          const kB365 = lineNum - 1;
+          let cdf = 0, term = Math.exp(-lambda);
+          for (let j = 0; j <= kB365; j++) { cdf += term; term *= lambda / (j + 1); }
+          const probFair = Math.max(0, Math.min(1, 1 - cdf));
+          evDK       = parseFloat(((probFair * oddB365 - 1) * 100).toFixed(1));
+          // âncora visual: linha DK mais próxima
+          dkOddUsed  = bestMatch ? bestMatch.odd : dkLines[0].odd;
+          dkLineUsed = bestMatch ? bestMatch.line : dkLines[0].line;
+          method     = 'poisson';
+          matchedPoisson++;
+        } else if (dkLines.length === 1) {
+          // Só 1 linha — usa diretamente mesmo com distância maior
+          const probFairDK = (1 / dkLines[0].odd) / DK_MARGIN;
+          evDK       = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
+          dkOddUsed  = dkLines[0].odd;
+          dkLineUsed = dkLines[0].line;
+          method     = 'single';
+          matchedPoisson++;
+        } else {
+          card.setAttribute('data-ev-pinnacle', 'NaN');
+          unmatched++;
+          return;
+        }
+      }
 
       card.setAttribute('data-ev-pinnacle', evDK);
-      card.setAttribute('data-odd-dk', ref.dkOdd);
-      card.setAttribute('data-dk-line', ref.dkLine);
+      card.setAttribute('data-odd-dk', dkOddUsed);
+      card.setAttribute('data-dk-line', dkLineUsed);
+      card.setAttribute('data-dk-method', method);
       matched++;
     });
 
-    console.log(`[DK] Matching: ${matched} matched, ${unmatched} sem match`);
+    console.log(`[DK] Matching: ${matched} total (${matchedDirect} direto, ${matchedPoisson} Poisson), ${unmatched} sem match`);
 
     refLoaded = true;
-    applyEVModeToCards(); // isso agora também chama updateMetricsFromDOM()
+    applyEVModeToCards();
     if (statusEl) {
-      statusEl.textContent = `✓ DraftKings: ${fetched} jogos, ${Object.keys(refCache).length} props (${matched} matched, ${unmatched} sem match)`;
-      setTimeout(() => statusEl.style.display = 'none', 5000);
+      statusEl.textContent = `✓ DraftKings: ${fetched} jogos, ${Object.keys(refCache).length} linhas (${matchedDirect} direto, ${matchedPoisson} Poisson, ${unmatched} sem match)`;
+      setTimeout(() => statusEl.style.display = 'none', 6000);
     }
   } catch(e) {
     if (statusEl) { statusEl.textContent = '⚠ DraftKings: ' + e.message; setTimeout(() => statusEl.style.display = 'none', 4000); }
@@ -1097,7 +1183,7 @@ function startExtensionSync() {
   }, 30000);
 }
 
-// ─── renderTopEVFromDOM — sem filtro DK_MIN_ODD; usa threshold para high-value ─
+// ─── renderTopEVFromDOM — usa oddThreshold do usuário no modo DK ─────────────
 function renderTopEVFromDOM() {
   const isDK = evMode === 'dk';
   const cards = document.querySelectorAll('[data-player][data-ev]');
@@ -1111,10 +1197,15 @@ function renderTopEVFromDOM() {
     if (parentCard && parentCard.style.display === 'none') return;
 
     const odd = parseFloat(card.getAttribute('data-odd'));
+
+    // No modo DK, aplica oddThreshold para eliminar linhas baixas (ruído do modelo)
+    // Ex: DK âncora Over 24.5 → Bet365 10+ @ 1.07 = matematicamente EV+ mas inaproveitável
+    if (isDK && odd < oddThreshold) return;
+
     let ev;
     if (isDK) {
       ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
-      if (isNaN(ev)) return; // sem match DK → não entra no ranking
+      if (isNaN(ev)) return;
     } else {
       ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
     }
