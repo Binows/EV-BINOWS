@@ -193,6 +193,16 @@ export default function App() {
     [manualView.players, seasonLogs],
   )
 
+  const enrichedTopEV = useMemo(() => {
+    const topEV = []
+    for (const player of enrichedPlayers) {
+      for (const line of player.lines) {
+        if (line.isPositive) topEV.push(line)
+      }
+    }
+    return topEV.sort((a, b) => b.ev - a.ev)
+  }, [enrichedPlayers])
+
   // --- Live view model ---
   const liveFiltered = useMemo(() => {
     let data = [...liveBets]
@@ -317,7 +327,7 @@ export default function App() {
             {statsStatus && (
               <div className="stats-status">{statsStatus}</div>
             )}
-            <TopEvPanel items={manualView.topEV} />
+            <TopEvPanel items={enrichedTopEV} />
             <div className="section-title">player props</div>
             <PlayerCards players={enrichedPlayers} />
           </>
