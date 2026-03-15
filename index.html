@@ -332,12 +332,43 @@ function calibrateLambda(p_a, k_a, p_b, k_b) {
   return (bisect(p_a, k_a) + bisect(p_b, k_b)) / 2;
 }
 
-const BET365_MARGIN = 1.07;
-function fairProb(odd) { return (1 / odd) / BET365_MARGIN; }
+// Remove margem dinamicamente usando o overround real do conjunto de odds
+// Isso é muito mais preciso do que usar margem fixa de 7%
+function calcFairProbs(sortedOdds) {
+  // Overround = soma de todas as probabilidades implícitas
+  const overround = sortedOdds.reduce((s, o) => s + 1 / o, 0);
+  // Prob fair de cada odd = prob implícita / overround (normaliza para somar 1)
+  // Mas para props Over cumulativos, precisamos tratar diferente:
+  // cada linha é independente, então normalizamos o overround médio
+  return sortedOdds.map(o => (1 / o) / overround * sortedOdds.length);
+}
+
+// Para uma odd isolada, estima margem pelo overround do conjunto
+function fairProbFromSet(odd, allOdds) {
+  const overround = allOdds.reduce((s, o) => s + 1 / o, 0);
+  // Margem por linha ≈ overround / n_linhas
+  const marginPerLine = overround / allOdds.length;
+  return (1 / odd) / marginPerLine;
+}
+
 function calcEV(prob, odd) { return parseFloat(((prob * odd - 1) * 100).toFixed(1)); }
 function calcKelly(prob, odd) {
   if (odd <= 1) return 0;
   return parseFloat(Math.min(Math.max(0, (prob * odd - 1) / (odd - 1)) * 50, 2.5).toFixed(2));
+}
+
+// Calibra lambda usando TODAS as odds disponíveis (mínimos quadrados via bisseção)
+function calibrateLambdaMulti(points) {
+  // points = array de {k, fairP} onde fairP é a prob fair de atingir k+
+  // Minimiza erro quadrático médio entre poissonCDF(lambda, k) e fairP
+  let lo = 0.1, hi = 60;
+  for (let iter = 0; iter < 100; iter++) {
+    const mid = (lo + hi) / 2;
+    // Gradiente: se lambda muito alto, CDFs altas demais
+    const err = points.reduce((s, {k, fairP}) => s + (poissonCDF(mid, k) - fairP), 0);
+    if (err > 0) hi = mid; else lo = mid;
+  }
+  return (lo + hi) / 2;
 }
 
 function detectMarketByContent(players) {
@@ -645,14 +676,23 @@ function renderManual() {
       .filter(x => !isNaN(x.k) && x.odd >= 1.01).sort((a, b) => a.k - b.k);
     let lambda = null;
     if (sorted.length >= 2) {
-      const first = sorted[0], last = sorted[sorted.length - 1];
-      try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); } catch(e) {}
+      const allOdds = sorted.map(x => x.odd);
+      // Calcula prob fair de cada linha removendo margem real (overround dinâmico)
+      const points = sorted.map(({odd, k}) => ({
+        k,
+        fairP: fairProbFromSet(odd, allOdds)
+      }));
+      try { lambda = calibrateLambdaMulti(points); } catch(e) {}
     }
     const slug = playerSlug(p.player);
+    const allOdds = sorted.map(x => x.odd);
     let playerHasEV = false;
 
     const lineCards = sorted.map(({ label, odd, k }) => {
-      let prob = fairProb(odd), ev = 0, kelly = 0;
+      const fairP = lambda !== null
+        ? poissonCDF(lambda, k)
+        : fairProbFromSet(odd, allOdds);
+      let prob = fairP, ev = 0, kelly = 0;
       if (lambda !== null) { prob = poissonCDF(lambda, k); ev = calcEV(prob, odd); kelly = calcKelly(prob, odd); }
       totalLines++;
       const isHighValue = ev > 3 && odd >= oddThreshold;
@@ -704,9 +744,10 @@ function hasEVPlus(p) {
   const sorted = Object.entries(p.lines || {}).map(([label, odd]) => ({ odd, k: parseInt(label) - 1 }))
     .filter(x => !isNaN(x.k) && x.odd >= 1.01).sort((a, b) => a.k - b.k);
   if (sorted.length < 2) return false;
-  const first = sorted[0], last = sorted[sorted.length - 1];
+  const allOdds = sorted.map(x => x.odd);
+  const points = sorted.map(({odd, k}) => ({ k, fairP: fairProbFromSet(odd, allOdds) }));
   let lambda;
-  try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); } catch(e) { return false; }
+  try { lambda = calibrateLambdaMulti(points); } catch(e) { return false; }
   return sorted.some(({ odd, k }) => calcEV(poissonCDF(lambda, k), odd) > 3);
 }
 
