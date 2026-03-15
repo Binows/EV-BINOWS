@@ -160,9 +160,43 @@
   .copy-btn:hover { background: #1a4d7a; }
   .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
   .req-info { font-size: 11px; color: #4caf50; }
+  /* Busca por jogador */
+  .search-control {
+    display: flex; align-items: center; gap: 8px;
+    background: #0f0f13; border: 1px solid #2a2a3e;
+    border-radius: 20px; padding: 5px 12px;
+  }
+  .search-input {
+    font-size: 12px; background: transparent; border: none;
+    color: #fff; outline: none; width: 140px;
+  }
+  .search-input::placeholder { color: #444; }
+
+  /* Toggle EV métrica */
+  .ev-toggle {
+    display: flex; gap: 2px; background: #0f0f13;
+    border: 1px solid #2a2a3e; border-radius: 20px; padding: 3px;
+  }
+  .ev-toggle-btn {
+    font-size: 11px; padding: 4px 10px; border-radius: 16px;
+    border: none; background: transparent; color: #666; cursor: pointer;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .ev-toggle-btn.active { background: #2a2a3e; color: #fff; }
+  .ev-toggle-btn.pinnacle.active { background: #1a2a3d; color: #4a9eff; }
+
+  /* EV Pinnacle no card */
+  .line-stat-val.pinnacle { color: #4a9eff; font-weight: 600; }
+  .ev-signal.pinnacle { background: #1a2a3d; color: #4a9eff; border: 1px solid #4a9eff44; }
+  .line-card.ev-plus-pinnacle { border-color: #4a9eff44; background: #0a1a2a22; }
+
+  /* Card oculto pela busca */
+  .player-card.hidden-search { display: none; }
+
   @media (max-width: 600px) {
     .metrics { grid-template-columns: repeat(2, 1fr); }
     .line-card { min-width: 90px; }
+    .search-input { width: 90px; }
   }
 </style>
 </head>
@@ -189,6 +223,15 @@
       <span class="threshold-label">odd mín. <span id="threshold-display">2.00</span></span>
       <input class="threshold-input" type="number" id="threshold-input" value="2.00" min="1.01" max="20" step="0.10"
         oninput="onThresholdChange(this.value)" onchange="onThresholdChange(this.value)">
+    </div>
+    <div class="search-control">
+      <span style="font-size:12px;color:#444">🔍</span>
+      <input class="search-input" id="player-search" type="text" placeholder="Buscar jogador..."
+        oninput="onPlayerSearch(this.value)">
+    </div>
+    <div class="ev-toggle">
+      <button class="ev-toggle-btn active" id="toggle-season" onclick="setEVMode('season', this)">📊 Temporada</button>
+      <button class="ev-toggle-btn pinnacle" id="toggle-pinnacle" onclick="setEVMode('pinnacle', this)">📌 Pinnacle</button>
     </div>
   </div>
 </div>
@@ -263,7 +306,11 @@ let currentMode    = 'manual';
 let activeFilter   = 'todos';
 let allDatasets    = [];
 let allLiveBets    = [];
-let oddThreshold   = 2.00;   // <-- valor padrão do threshold
+let oddThreshold   = 2.00;
+let evMode         = 'season';   // 'season' | 'pinnacle'
+let playerSearch   = '';
+let pinnacleCache  = {};  // cache das odds Pinnacle: {playerName_lineNum_market: odd}
+let pinnacleLoaded = false;
 
 function onThresholdChange(val) {
   const n = parseFloat(val);
@@ -273,7 +320,141 @@ function onThresholdChange(val) {
   applyHighValueHighlight();   // atualiza highlight sem re-renderizar tudo
 }
 
-// Aplica / remove .high-value nos cards e itens do ranking com base no threshold atual
+// ── Busca por jogador ─────────────────────────────────────────────────────
+function onPlayerSearch(val) {
+  playerSearch = val.toLowerCase().trim();
+  document.querySelectorAll('.player-card').forEach(card => {
+    const name = (card.querySelector('.player-name')?.textContent || '').toLowerCase();
+    card.classList.toggle('hidden-search', playerSearch !== '' && !name.includes(playerSearch));
+  });
+}
+
+// ── Toggle EV métrica ──────────────────────────────────────────────────────
+function setEVMode(mode, el) {
+  evMode = mode;
+  document.querySelectorAll('.ev-toggle-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (mode === 'pinnacle') {
+    loadPinnacleOdds();
+  } else {
+    // Volta para EV da temporada — restaura data-ev originais
+    applyEVModeToCards();
+  }
+}
+
+// Aplica o modo EV atual nos cards (season ou pinnacle)
+function applyEVModeToCards() {
+  document.querySelectorAll('[data-player][data-ev-season]').forEach(card => {
+    const ev = evMode === 'pinnacle'
+      ? parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN')
+      : parseFloat(card.getAttribute('data-ev-season') || 'NaN');
+
+    if (isNaN(ev)) return;
+
+    const evEl = card.querySelector('.ev-val');
+    const signalEl = card.querySelector('.ev-signal');
+    const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
+    const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
+
+    if (evEl) {
+      evEl.textContent = (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
+      evEl.className = 'line-stat-val ev-val ' + sigCls + (evMode === 'pinnacle' ? ' pinnacle' : '');
+    }
+    if (signalEl) {
+      signalEl.textContent = evMode === 'pinnacle' ? (sigTxt + ' 📌') : sigTxt;
+      signalEl.className = 'ev-signal ' + sigCls + (evMode === 'pinnacle' && ev > 3 ? ' pinnacle' : '');
+    }
+
+    card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-pinnacle', 'high-value');
+    if (ev > 3) {
+      card.classList.add(evMode === 'pinnacle' ? 'ev-plus-pinnacle' : 'ev-plus');
+      if (parseFloat(card.getAttribute('data-odd')) >= oddThreshold) card.classList.add('high-value');
+    } else if (ev < -3) {
+      card.classList.add('ev-minus');
+    }
+  });
+  renderTopEVFromDOM();
+}
+
+// ── Busca odds Pinnacle via Odds API ───────────────────────────────────────
+const MKT_API = { pontos: 'player_points', rebotes: 'player_rebounds', assistências: 'player_assists', '3pts': 'player_threes_made' };
+
+async function loadPinnacleOdds() {
+  if (pinnacleLoaded) { applyEVModeToCards(); return; }
+  const statusEl = document.getElementById('nba-status');
+  if (statusEl) { statusEl.textContent = '📌 Buscando odds Pinnacle...'; statusEl.style.display = 'block'; }
+
+  try {
+    // Busca eventos de hoje
+    const evRes = await fetch(`${WORKER}/odds/sports/basketball_nba/events`);
+    if (!evRes.ok) throw new Error('Erro ao buscar eventos');
+    const events = await evRes.json();
+    const agora = new Date();
+    const jogos = events.filter(e => new Date(e.commence_time) > agora).slice(0, 6);
+    if (!jogos.length) throw new Error('Nenhum jogo encontrado');
+
+    // Mercados necessários baseados nos datasets importados
+    const marketsNeeded = [...new Set(allDatasets.map(d => MKT_API[d.market]).filter(Boolean))];
+    if (!marketsNeeded.length) throw new Error('Nenhum mercado reconhecido');
+
+    let fetched = 0;
+    for (const ev of jogos) {
+      if (statusEl) statusEl.textContent = `📌 Pinnacle: ${ev.away_team} @ ${ev.home_team}...`;
+      try {
+        const url = `${WORKER}/odds/sports/basketball_nba/events/${ev.id}/odds?regions=us&markets=${marketsNeeded.join(',')}&bookmakers=pinnacle&oddsFormat=decimal`;
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = await res.json();
+        const pinnacle = data.bookmakers?.find(b => b.key === 'pinnacle');
+        if (!pinnacle) continue;
+
+        for (const mkt of pinnacle.markets) {
+          const marketPT = Object.entries(MKT_API).find(([,v]) => v === mkt.key)?.[0];
+          if (!marketPT) continue;
+          for (const out of mkt.outcomes) {
+            if (out.name !== 'Over') continue;
+            // Chave: nome_normalizado|mercado|linha
+            const key = playerSlug(out.description) + '|' + marketPT + '|' + out.point;
+            pinnacleCache[key] = out.price;
+          }
+        }
+        fetched++;
+      } catch(e) { console.warn('Pinnacle fetch error:', e); }
+    }
+
+    // Aplica odds Pinnacle nos cards
+    document.querySelectorAll('[data-player][data-line]').forEach(card => {
+      const slug    = card.getAttribute('data-player');
+      const market  = card.getAttribute('data-market');
+      const lineNum = parseFloat(card.getAttribute('data-line'));
+      const oddB365 = parseFloat(card.getAttribute('data-odd'));
+
+      // Tenta match exato primeiro, depois ±0.5
+      let pinnacleOdd = null;
+      for (const delta of [0, 0.5, -0.5, 1, -1]) {
+        const key = slug + '|' + market + '|' + (lineNum - 1 + delta);
+        if (pinnacleCache[key]) { pinnacleOdd = pinnacleCache[key]; break; }
+      }
+
+      if (pinnacleOdd) {
+        const probPinnacle = 1 / pinnacleOdd; // Pinnacle tem ~2% margem, quase fair
+        const evPinnacle = parseFloat(((probPinnacle * oddB365 - 1) * 100).toFixed(1));
+        card.setAttribute('data-ev-pinnacle', evPinnacle);
+      } else {
+        card.setAttribute('data-ev-pinnacle', 'NaN');
+      }
+    });
+
+    pinnacleLoaded = true;
+    applyEVModeToCards();
+    if (statusEl) { statusEl.textContent = `✓ Pinnacle: ${fetched} jogos carregados`; setTimeout(() => statusEl.style.display = 'none', 3000); }
+  } catch(e) {
+    if (statusEl) { statusEl.textContent = '⚠ Pinnacle: ' + e.message; setTimeout(() => statusEl.style.display = 'none', 4000); }
+    console.error('loadPinnacleOdds error:', e);
+  }
+}
+
+// ── Aplica / remove .high-value nos cards e itens do ranking com base no threshold atual
 function applyHighValueHighlight() {
   // Cards de linha
   document.querySelectorAll('.line-card.ev-plus').forEach(card => {
@@ -700,8 +881,11 @@ function updatePlayerCards(playerName, market, logs) {
 
     // Persiste no data-* para renderTopEVFromDOM
     card.setAttribute('data-ev', ev);
+    card.setAttribute('data-ev-season', ev);
     card.setAttribute('data-kelly', kelly);
     card.setAttribute('data-hr', hr.hits + '/' + hr.games);
+    // Invalida cache Pinnacle para recarregar na próxima troca de modo
+    if (evMode === 'pinnacle') applyEVModeToCards();
   });
 }
 
@@ -728,6 +912,7 @@ function renderTopEVFromDOM() {
 
 function renderManual() {
   if (!allDatasets.length) return;
+  pinnacleLoaded = false; // Reseta cache Pinnacle ao importar novos arquivos
   let allPlayers = [], latestScrapedAt = null;
   for (const ds of allDatasets) {
     const mkt = ds.market || 'desconhecido';
@@ -780,7 +965,7 @@ function renderManual() {
       return `<div class="line-card ${cls}${highValCls}"
         data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
         data-label="${label}" data-line="${parseInt(label)}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
-        data-ev="${ev}" data-kelly="${kelly}" data-hr="">
+        data-ev="${ev}" data-ev-season="${ev}" data-ev-pinnacle="NaN" data-kelly="${kelly}" data-hr="">
         <div class="line-label">${label} ${mktLabel.toLowerCase()}</div>
         <div class="line-odd">${odd.toFixed(2)}</div>
         <div class="line-stats">
