@@ -467,34 +467,26 @@ async function loadRefOdds() {
 
       if (isNaN(lineNum) || isNaN(oddB365)) return;
 
-      // DraftKings usa Over X.5 (ex: Over 7.5 = bate 8 na Bet365)
-      // Tenta: lineNum-0.5, lineNum, lineNum-1, lineNum+0.5, lineNum-1.5, lineNum+1
-      const candidates = [lineNum - 0.5, lineNum, lineNum - 1, lineNum + 0.5, lineNum - 1.5, lineNum + 1, lineNum + 1.5];
+      // Bet365 "7+" (lineNum=7) = Over 6.5 no DK — são a mesma aposta
+      // Só aceita match exato: lineNum - 0.5
+      // Qualquer outro offset é uma aposta diferente e não deve ser comparada
+      const exactKey = slug + '|' + market + '|' + (lineNum - 0.5);
       let refOdd = null, matchedKey = null;
 
-      for (const target of candidates) {
-        const key = slug + '|' + market + '|' + target;
-        if (refCache[key] !== undefined) {
-          refOdd = refCache[key];
-          matchedKey = key;
-          break;
-        }
+      if (refCache[exactKey] !== undefined) {
+        refOdd = refCache[exactKey];
+        matchedKey = exactKey;
       }
 
       if (refOdd) {
-        // Cálculo correto: DraftKings tem ~6% de margem em player props
-        // Removemos a margem para obter a probabilidade fair implícita
-        // e calculamos o EV da odd Bet365 contra essa prob fair
         const DK_MARGIN = 1.06;
         const probFairDK = (1 / refOdd) / DK_MARGIN;
         const evDK = parseFloat(((probFairDK * oddB365 - 1) * 100).toFixed(1));
 
-        // Sanity check: EV > 60% é provável mismatch de linha — descarta
-        const evDKSafe = Math.abs(evDK) > 60 ? NaN : evDK;
-        card.setAttribute('data-ev-pinnacle', isNaN(evDKSafe) ? 'NaN' : evDKSafe);
-        card.setAttribute('data-odd-dk', refOdd);   // guarda odd DK para exibir
+        card.setAttribute('data-ev-pinnacle', evDK);
+        card.setAttribute('data-odd-dk', refOdd);
         matched++;
-        console.log(`[DK] ✓ ${slug}|${market}|${lineNum} → chave: ${matchedKey} oddDK:${refOdd} probFair:${(probFairDK*100).toFixed(1)}% oddB365:${oddB365} ev:${evDK}`);
+        console.log(`[DK] ✓ ${slug}|${market}|${lineNum} → Over ${lineNum - 0.5} oddDK:${refOdd} probFair:${(probFairDK*100).toFixed(1)}% oddB365:${oddB365} ev:${evDK}`);
       } else {
         card.setAttribute('data-ev-pinnacle', 'NaN');
         unmatched++;
