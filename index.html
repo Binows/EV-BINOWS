@@ -423,7 +423,7 @@ async function fetchNBAGameLogs(playerName) {
   try {
     const playerId = await fetchNBAPlayerID(playerName);
     if (!playerId) return null;
-    const res  = await fetch(`${WORKER}/nba/playergamelogs?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular+Season`);
+    const res  = await fetch(`${WORKER}/nba/playergamelog?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular%20Season&PerMode=PerGame`);
     const data = await res.json();
     const rows = data.resultSets[0].rowSet;
     const hdrs = data.resultSets[0].headers;
