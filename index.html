@@ -335,7 +335,7 @@ function setEVMode(mode, el) {
   document.querySelectorAll('.ev-toggle-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
   if (mode === 'pinnacle') {
-    loadPinnacleOdds();
+    loadRefOdds();
   } else {
     // Volta para EV da temporada — restaura data-ev originais
     applyEVModeToCards();
@@ -358,7 +358,7 @@ function applyEVModeToCards() {
 
     if (evEl) {
       evEl.textContent = (ev > 0 ? '+' : '') + ev.toFixed(1) + '%';
-      evEl.className = 'line-stat-val ev-val ' + sigCls + (evMode === 'pinnacle' ? ' pinnacle' : '');
+      evEl.className = 'line-stat-val ev-val ' + sigCls + (evMode === 'draftkings' ? ' pinnacle' : '');
     }
     if (signalEl) {
       signalEl.textContent = evMode === 'draftkings' ? (sigTxt + ' 📌') : sigTxt;
@@ -379,7 +379,7 @@ function applyEVModeToCards() {
 // ── Busca odds Pinnacle via Odds API ───────────────────────────────────────
 const MKT_API = { pontos: 'player_points', rebotes: 'player_rebounds', assistências: 'player_assists', '3pts': 'player_threes' };
 
-async function loadPinnacleOdds() {
+async function loadRefOdds() {
   if (refLoaded) { applyEVModeToCards(); return; }
   const statusEl = document.getElementById('nba-status');
   if (statusEl) { statusEl.textContent = '📌 Buscando odds DraftKings...'; statusEl.style.display = 'block'; }
@@ -457,7 +457,7 @@ async function loadPinnacleOdds() {
     if (statusEl) { statusEl.textContent = `✓ Pinnacle: ${fetched} jogos, ${Object.keys(refCache).length} props`; setTimeout(() => statusEl.style.display = 'none', 4000); }
   } catch(e) {
     if (statusEl) { statusEl.textContent = '⚠ DraftKings: ' + e.message; setTimeout(() => statusEl.style.display = 'none', 4000); }
-    console.error('loadPinnacleOdds error:', e);
+    console.error('loadRefOdds error:', e);
   }
 }
 
@@ -900,7 +900,7 @@ function updatePlayerCards(playerName, market, logs) {
     card.setAttribute('data-kelly', kelly);
     card.setAttribute('data-hr', hr.hits + '/' + hr.games);
     // Invalida cache Pinnacle para recarregar na próxima troca de modo
-    if (evMode === 'pinnacle') applyEVModeToCards();
+    if (evMode === 'draftkings') applyEVModeToCards();
   });
 }
 
