@@ -199,7 +199,9 @@ let allLiveBets  = [];
       return;
     }
     allDatasets = data.datasets;
-    updateChips();
+    document.getElementById('drop-area').innerHTML = `<p id="drop-label">${allDatasets.length} arquivo${allDatasets.length > 1 ? 's' : ''} carregado${allDatasets.length > 1 ? 's' : ''}</p>`;
+    document.getElementById('drop-area').classList.add('loaded');
+    document.getElementById('share-btn').style.display = 'inline-flex';
     renderManual();
   });
 })();
