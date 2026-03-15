@@ -645,15 +645,61 @@ function updatePlayerCards(playerName, market, logs) {
   cards.forEach(card => {
     const lineNum = parseInt(card.getAttribute('data-line'));
     const odd     = parseFloat(card.getAttribute('data-odd'));
-    const prob    = parseFloat(card.getAttribute('data-prob'));
     if (isNaN(lineNum) || isNaN(odd)) return;
+
     const hr = calcSeasonHitRate(logs, market, lineNum);
     if (!hr) return;
-    const kelly = calcKellyFromSeason(prob, odd, hr);
+
+    // ── Prob real = hit rate da temporada ──────────────────────────────
+    // Mínimo de 10 jogos para considerar confiável
+    const probReal = hr.games >= 10 ? hr.hits / hr.games : null;
+
+    // Recalcula EV com prob real (substitui o EV do Poisson)
+    const ev = probReal !== null ? calcEV(probReal, odd) : parseFloat(card.getAttribute('data-ev'));
+
+    // Kelly baseado no hit rate real
+    const kelly = probReal !== null
+      ? calcKellyFromSeason(probReal, odd, hr)
+      : parseFloat(card.getAttribute('data-kelly') || 0);
+
+    // Atualiza hit rate
     const hrEl = card.querySelector('.season-hr');
     if (hrEl) hrEl.textContent = `${hr.hits}/${hr.games} (${hr.pct}%)`;
+
+    // Atualiza EV no card
+    const evEl = card.querySelector('.ev-val');
+    const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
+    const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
+    if (evEl) {
+      evEl.textContent = (ev > 0 ? '+' : '') + ev + '%';
+      evEl.className = 'line-stat-val ev-val ' + sigCls;
+    }
+
+    // Atualiza badge EV+/EV-/neutro
+    const signalEl = card.querySelector('.ev-signal');
+    if (signalEl) {
+      signalEl.textContent = sigTxt;
+      signalEl.className = 'ev-signal ' + sigCls;
+    }
+
+    // Atualiza classe do card (borda verde/vermelho)
+    card.classList.remove('ev-plus', 'ev-minus', 'high-value');
+    if (ev > 3) {
+      card.classList.add('ev-plus');
+      if (odd >= oddThreshold) card.classList.add('high-value');
+    } else if (ev < -3) {
+      card.classList.add('ev-minus');
+    }
+
+    // Atualiza kelly
     const kellyEl = card.querySelector('.kelly-val');
-    if (kellyEl) { kellyEl.textContent = kelly > 0 ? kelly.toFixed(2) + '%' : '—'; kellyEl.className = 'line-stat-val kelly-val' + (kelly > 0 ? ' pos' : ''); }
+    if (kellyEl) {
+      kellyEl.textContent = kelly > 0 ? kelly.toFixed(2) + '%' : '—';
+      kellyEl.className = 'line-stat-val kelly-val' + (kelly > 0 ? ' pos' : '');
+    }
+
+    // Persiste no data-* para renderTopEVFromDOM
+    card.setAttribute('data-ev', ev);
     card.setAttribute('data-kelly', kelly);
     card.setAttribute('data-hr', hr.hits + '/' + hr.games);
   });
@@ -739,7 +785,7 @@ function renderManual() {
         <div class="line-odd">${odd.toFixed(2)}</div>
         <div class="line-stats">
           <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">${(prob*100).toFixed(1)}%</span></div>
-          <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
+          <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ev-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
           <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val ${kelly>0?'pos':''}">${kelly>0?kelly+'%':'—'}</span></div>
           <div class="line-stat"><span class="line-stat-label">Hit rate temporada</span><span class="line-stat-val season-hr" style="color:#555">carregando...</span></div>
         </div>
