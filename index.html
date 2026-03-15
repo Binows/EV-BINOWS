@@ -1100,29 +1100,30 @@ function renderManual() {
       const hvCls  = isHighValue ? ' high-value' : '';
       const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
       const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
-      const gameLabel = p.gameName ? `<span style="font-size:10px;color:#444;margin-left:6px">${p.gameName}</span>` : '';
-      return \`<div class="player-card\${playerHasEV ? ' has-ev' : ''}">
-        <div class="player-header">
-          <div class="player-name">\${p.player}\${gameLabel}</div>
-          <div class="player-meta"><span class="market-badge">\${mkt}</span></div>
-        </div>
-        <div class="lines">
-          <div class="line-card \${cls}\${hvCls}"
-            data-player="\${playerSlug(p.player)}" data-name="\${p.player}" data-market="\${mkt}" data-mktlabel="\${mktLabel}"
-            data-label="Sim" data-line="0" data-odd="\${oddSim}" data-prob="\${probFair.toFixed(4)}"
-            data-ev="\${ev}" data-ev-season="\${ev}" data-ev-pinnacle="NaN" data-kelly="\${kelly}" data-hr="">
-            <div class="line-label">Sim \${mktLabel}</div>
-            <div class="line-odd">\${oddSim.toFixed(2)}</div>
-            <div class="line-stats">
-              <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">\${(probFair*100).toFixed(1)}%</span></div>
-              <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ev-val \${sigCls}">\${ev>0?'+':''}\${ev}%</span></div>
-              \${oddNao ? \`<div class="line-stat"><span class="line-stat-label">Odd Não</span><span class="line-stat-val">\${oddNao.toFixed(2)}</span></div>\` : ''}
-              <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val \${kelly>0?'pos':''}">\${kelly>0?kelly+'%':'—'}</span></div>
-            </div>
-            <span class="ev-signal \${sigCls}">\${sigTxt}</span>
-          </div>
-        </div>
-      </div>\`;
+      const gameLabel = p.gameName ? '<span style="font-size:10px;color:#444;margin-left:6px">' + p.gameName + '</span>' : '';
+      const cardHTML = '<div class="player-card' + (playerHasEV ? ' has-ev' : '') + '">' +
+        '<div class="player-header">' +
+          '<div class="player-name">' + p.player + gameLabel + '</div>' +
+          '<div class="player-meta"><span class="market-badge">' + mkt + '</span></div>' +
+        '</div>' +
+        '<div class="lines">' +
+          '<div class="line-card ' + cls + hvCls + '"' +
+            ' data-player="' + playerSlug(p.player) + '" data-name="' + p.player + '" data-market="' + mkt + '" data-mktlabel="' + mktLabel + '"' +
+            ' data-label="Sim" data-line="0" data-odd="' + oddSim + '" data-prob="' + probFair.toFixed(4) + '"' +
+            ' data-ev="' + ev + '" data-ev-season="' + ev + '" data-ev-pinnacle="NaN" data-kelly="' + kelly + '" data-hr="">' +
+            '<div class="line-label">Sim ' + mktLabel + '</div>' +
+            '<div class="line-odd">' + oddSim.toFixed(2) + '</div>' +
+            '<div class="line-stats">' +
+              '<div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">' + (probFair*100).toFixed(1) + '%</span></div>' +
+              '<div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ev-val ' + sigCls + '">' + (ev>0?'+':'') + ev + '%</span></div>' +
+              (oddNao ? '<div class="line-stat"><span class="line-stat-label">Odd Não</span><span class="line-stat-val">' + oddNao.toFixed(2) + '</span></div>' : '') +
+              '<div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val ' + (kelly>0?'pos':'') + '">' + (kelly>0?kelly+'%':'—') + '</span></div>' +
+            '</div>' +
+            '<span class="ev-signal ' + sigCls + '">' + sigTxt + '</span>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+      return cardHTML;
     }
 
     if (linesEntries.length < 2) return '';
