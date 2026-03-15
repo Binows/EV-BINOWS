@@ -1296,6 +1296,21 @@ function calcQualityScore(ev, odd, hrStr) {
   return 1;
 }
 
+// Score de qualidade para modo DK sem hit rate disponível
+// Usa só volatilidade da odd e EV como proxy de confiança
+function calcQualityScoreDK(ev, odd) {
+  // Volatilidade: odd 1.5→0.92, odd 2→0.82, odd 3.5→0.65, odd 7→0.45, odd 14→0.26
+  const volatilityFactor = Math.max(0.12, 1 / (1 + Math.log(odd) * 0.60));
+  // EV moderado normalizado — no DK já filtramos >60% e <5%, então faixa esperada é 5-50%
+  const evFactor = Math.min(ev / 40, 1.0);
+  const score = volatilityFactor * 0.65 + evFactor * 0.35;
+  // Máximo 4 estrelas sem hit rate — nunca 5 pois falta confirmação histórica
+  if (score >= 0.70) return 4;
+  if (score >= 0.52) return 3;
+  if (score >= 0.35) return 2;
+  return 1;
+}
+
 function starsHTML(n, isDK) {
   const color = isDK ? '#4a9eff' : '#c8a84b';
   const empty = '#2a2a3e';
@@ -1361,7 +1376,15 @@ function renderTopEVFromDOM() {
       lineNum:  parseInt(card.getAttribute('data-line')),
       hr:       card.getAttribute('data-hr') || '',
       isDK,
-      quality:  calcQualityScore(ev, odd, card.getAttribute('data-hr') || '')
+      quality: (() => {
+        const hr = card.getAttribute('data-hr') || '';
+        // Se tem hit rate carregado, usa score completo
+        if (hr && hr.includes('/')) return calcQualityScore(ev, odd, hr);
+        // No modo DK sem hr, usa proxy por odd+EV (máx 4★)
+        if (isDK) return calcQualityScoreDK(ev, odd);
+        // Modo temporada sem hr ainda carregando — score neutro
+        return 0;
+      })()
     });
   });
 
