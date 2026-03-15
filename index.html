@@ -383,8 +383,28 @@ function setFilter(f, el) {
   activeFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  if (currentMode === 'manual' && allDatasets.length) renderManual();
-  else if (currentMode === 'live') renderLive();
+  if (currentMode === 'live') { renderLive(); return; }
+  if (!allDatasets.length) return;
+  // Se ainda não renderizou, faz renderManual completo
+  if (!document.querySelector('.player-card')) { renderManual(); return; }
+  // Caso contrário, só esconde/mostra por CSS — não re-renderiza
+  applyFilterToCards(f);
+}
+
+function applyFilterToCards(f) {
+  const cards = document.querySelectorAll('.player-card[data-market-type]');
+  cards.forEach(card => {
+    const mkt = card.getAttribute('data-market-type');
+    let show = true;
+    if (f === 'reb')  show = mkt === 'rebotes';
+    else if (f === 'pts')  show = mkt === 'pontos';
+    else if (f === 'ast')  show = mkt === 'assistências';
+    else if (f === '3pts') show = mkt === '3pts';
+    else if (f === 'pos')  show = card.querySelector('.line-card.ev-plus') !== null;
+    card.style.display = show ? '' : 'none';
+  });
+  // Ranking sempre usa todos os cards (incluindo ocultos)
+  renderTopEVFromDOM();
 }
 
 function resetMetrics() {
@@ -633,7 +653,6 @@ function copiarLink() {
 
 const NBA_CACHE = {}, NBA_ID_CACHE = {};
 let _statsAlreadyLoaded = false; // evita recarregar ao trocar filtro/aba
-let _cachedTopEV = []; // cache do ranking completo independente do filtro ativo
 const SEASON = '2025-26';
 const WORKER = 'https://round-rain-9e80.vinipaio.workers.dev';
 let _allPlayersCache = null;
@@ -947,29 +966,30 @@ function setQualityFilter(stars) {
   renderTopEVFromDOM();
 }
 function renderTopEVFromDOM() {
-  // Atualiza o cache com os EVs reais dos cards (após stats carregarem)
-  // Varre TODOS os cards no DOM independente do filtro ativo
-  const allCards = document.querySelectorAll('[data-player][data-ev][data-ev-season]');
-  const updatedMap = {};
-  allCards.forEach(card => {
+  // Varre TODOS os cards do DOM — incluindo os ocultos por filtro (display:none no player-card)
+  // Isso garante que o ranking sempre reflita todos os mercados
+  const cards = document.querySelectorAll('[data-player][data-ev]');
+  const items = [];
+  cards.forEach(card => {
     if (card.classList.contains('player-card')) return;
-    const key = card.getAttribute('data-name') + '|' + card.getAttribute('data-label') + '|' + card.getAttribute('data-market');
-    const ev  = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
-    const hr  = card.getAttribute('data-hr') || '';
     const odd = parseFloat(card.getAttribute('data-odd'));
-    if (!isNaN(ev)) updatedMap[key] = { ev, hr, kelly: parseFloat(card.getAttribute('data-kelly') || 0), quality: hr.includes('/') ? calcQualityScore(ev, odd, hr) : 0 };
+    const ev  = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
+    if (isNaN(ev) || ev <= 3) return;
+    const hr = card.getAttribute('data-hr') || '';
+    items.push({
+      player:   card.getAttribute('data-name'),
+      market:   card.getAttribute('data-market'),
+      mktLabel: card.getAttribute('data-mktlabel'),
+      label:    card.getAttribute('data-label'),
+      odd, ev,
+      kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
+      lineNum:  parseInt(card.getAttribute('data-line')),
+      hr,
+      quality:  hr.includes('/') ? calcQualityScore(ev, odd, hr) : 0
+    });
   });
-
-  // Aplica atualizações ao cache global
-  const items = _cachedTopEV.map(item => {
-    const key = item.player + '|' + item.label + '|' + item.market;
-    const upd = updatedMap[key];
-    return upd ? { ...item, ev: upd.ev, hr: upd.hr, kelly: upd.kelly, quality: upd.quality } : item;
-  }).filter(i => i.ev > 3);
-
   const filtered = minQualityFilter > 0 ? items.filter(i => i.quality >= minQualityFilter) : items;
   filtered.sort((a, b) => (b.quality * 20 + b.ev) - (a.quality * 20 + a.ev));
-  _cachedTopEV = items; // atualiza cache com EVs reais
   renderTopEV(filtered);
 }
 
@@ -1102,7 +1122,6 @@ function renderManual() {
 
   list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
   topEVItems.sort((a, b) => b.ev - a.ev);
-  _cachedTopEV = topEVItems; // guarda ranking completo para uso ao trocar filtro
   renderTopEV(topEVItems);
   saveToStorage();
   document.getElementById('cnt-pos').textContent    = evPlusCount;
