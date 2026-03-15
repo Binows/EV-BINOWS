@@ -332,17 +332,48 @@ function calibrateLambda(p_a, k_a, p_b, k_b) {
   return (bisect(p_a, k_a) + bisect(p_b, k_b)) / 2;
 }
 
-// Margem da Bet365 em player props: ~10% por linha
-// Props Over cumulativos NÃO somam para 1, então overround não se aplica
-// Testado empiricamente: 10% produz EV na faixa realista de 0-15%
-const BET365_MARGIN = 1.10;
-
-function calcDynamicMargin(allOdds) {
-  return BET365_MARGIN;
-}
+// Margem da Bet365 em player props
+// Estratégia: usar apenas linhas do meio (excluindo extremas)
+// pois as extremas têm margem muito maior e distorcem o lambda
 
 function fairProb(odd, margin) {
-  return (1 / odd) / (margin || BET365_MARGIN);
+  return (1 / odd) / (margin || 1.08);
+}
+
+// Calibra lambda usando apenas as linhas centrais do conjunto
+// (ignora primeiros 25% e últimos 25% que têm margem distorcida)
+function calibrateLambdaFromMiddle(sorted, margin) {
+  const n = sorted.length;
+  // Pega apenas as linhas do meio (descarta extremas se tiver 4+)
+  const mid = n >= 4
+    ? sorted.slice(Math.floor(n * 0.25), Math.ceil(n * 0.75))
+    : sorted;
+  // Usa primeira e última do subconjunto central
+  const first = mid[0], last = mid[mid.length - 1];
+  if (first === last) return calibrateLambda(
+    fairProb(first.odd, margin), first.k,
+    fairProb(last.odd, margin), last.k
+  );
+  return calibrateLambda(
+    fairProb(first.odd, margin), first.k,
+    fairProb(last.odd, margin), last.k
+  );
+}
+
+// Margem estimada dinamicamente:
+// Compara a odd mais baixa (mais líquida, menor margem) com média do conjunto
+function calcDynamicMargin(allOdds) {
+  // Ordena da menor para maior odd
+  const sorted = [...allOdds].sort((a, b) => a - b);
+  // A odd mais baixa tem ~5-6% de margem, as altas têm 20-30%
+  // Estimamos a margem média do conjunto pela razão entre odds baixas e altas
+  const minOdd = sorted[0];
+  const midOdd = sorted[Math.floor(sorted.length / 2)];
+  // Margem base: 8% para odds baixas, sobe proporcionalmente
+  const baseMar = 1.08;
+  const ratio = midOdd / minOdd;
+  // Margem média cresce com a dispersão das odds
+  return Math.min(baseMar * Math.pow(ratio, 0.15), 1.35);
 }
 
 function calcEV(prob, odd) { return parseFloat(((prob * odd - 1) * 100).toFixed(1)); }
@@ -658,8 +689,7 @@ function renderManual() {
     const allOdds = sorted.map(x => x.odd);
     const margin = calcDynamicMargin(allOdds);
     if (sorted.length >= 2) {
-      const first = sorted[0], last = sorted[sorted.length - 1];
-      try { lambda = calibrateLambda(fairProb(first.odd, margin), first.k, fairProb(last.odd, margin), last.k); } catch(e) {}
+      try { lambda = calibrateLambdaFromMiddle(sorted, margin); } catch(e) {}
     }
     const slug = playerSlug(p.player);
     let playerHasEV = false;
