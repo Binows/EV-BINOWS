@@ -800,7 +800,27 @@ function updatePlayerCards(playerName, market, logs) {
     card.setAttribute('data-ev-season', ev);
     card.setAttribute('data-kelly', kelly);
     card.setAttribute('data-hr', hr.hits + '/' + hr.games);
+
+    // Oculta linha se EV real < -3% (após stats carregarem)
+    card.style.display = ev < -3 ? 'none' : '';
   });
+
+  // Oculta player-card inteiro se não sobrou nenhuma linha visível
+  const playerCard = document.querySelector(`.player-card[data-market-type="${market}"] .lines`);
+  // Reordena player-cards pelo melhor EV+ após stats
+  sortPlayerCardsByEV();
+}
+
+function sortPlayerCardsByEV() {
+  const list = document.getElementById('manual-list');
+  if (!list) return;
+  const cards = Array.from(list.querySelectorAll('.player-card'));
+  cards.sort((a, b) => {
+    const evA = Math.max(...Array.from(a.querySelectorAll('[data-ev]')).map(el => parseFloat(el.getAttribute('data-ev-season') || el.getAttribute('data-ev') || '-999')));
+    const evB = Math.max(...Array.from(b.querySelectorAll('[data-ev]')).map(el => parseFloat(el.getAttribute('data-ev-season') || el.getAttribute('data-ev') || '-999')));
+    return evB - evA;
+  });
+  cards.forEach(card => list.appendChild(card));
 }
 
 function playerSlug(name) { return name.toLowerCase().replace(/[^a-z0-9]/g, '-'); }
@@ -996,16 +1016,6 @@ function renderManual() {
   let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
   const topEVItems = [];
 
-  // Ordena jogadores por melhor EV+ antes de renderizar
-  allPlayersFiltered = allPlayersFiltered.map(p => {
-    if (p.binary) return { ...p, _bestEV: p.lines['Sim'] ? calcEV((1/p.lines['Sim'])/(p.oddNao?(1/p.lines['Sim']+1/p.oddNao):1.08), p.lines['Sim']) : -999 };
-    const s2 = Object.entries(p.lines||{}).map(([l,o])=>({odd:o,k:parseInt(l)-1})).filter(x=>!isNaN(x.k)&&x.odd>=1.01&&x.odd<36).sort((a,b)=>a.k-b.k);
-    if (s2.length < 2) return { ...p, _bestEV: -999 };
-    const m2 = calcDynamicMargin(s2.map(x=>x.odd));
-    let lam2 = null; try { lam2 = calibrateLambdaFromMiddle(s2, m2); } catch(e) {}
-    return { ...p, _bestEV: lam2 ? Math.max(...s2.map(({odd,k})=>calcEV(poissonCDF(lam2,k),odd))) : -999 };
-  }).sort((a,b) => b._bestEV - a._bestEV);
-
   const html = allPlayersFiltered.map(p => {
     const mkt = p.market || 'desconhecido', mktLabel = MKT_NAMES[mkt] || mkt;
     const linesEntries = Object.entries(p.lines || {});
@@ -1071,11 +1081,10 @@ function renderManual() {
       const isHighValue = ev > 3 && odd >= oddThreshold;
       if (ev > 3) { evPlusCount++; playerHasEV = true; topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), hr: '' }); }
       if (ev > bestEV) bestEV = ev;
-      if (ev < -3) return '';
-      const cls = ev > 3 ? 'ev-plus' : '';
+      const cls = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
       const highValCls = isHighValue ? ' high-value' : '';
-      const sigCls = ev > 3 ? 'pos' : 'neu';
-      const sigTxt = ev > 3 ? 'EV+' : 'neutro';
+      const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
+      const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
       return `<div class="line-card ${cls}${highValCls}"
         data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
         data-label="${label}" data-line="${parseInt(label)}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
