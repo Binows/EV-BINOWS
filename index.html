@@ -246,25 +246,25 @@
 
 <!-- Firebase via CDN compat (sem module, sem escopo isolado) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js" onload="onFirebaseReady()"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
-let _db = null;
-function initFirebase() {
-  if (typeof firebase === 'undefined') { console.error('Firebase SDK nao carregou'); return false; }
-  if (!firebase.apps.length) {
-    firebase.initializeApp({
-      apiKey: "AIzaSyBp5jjj0SaFuN3xK_ZCsHBknntLwP7LG48",
-      authDomain: "ev-binows.firebaseapp.com",
-      databaseURL: "https://ev-binows-default-rtdb.firebaseio.com",
-      projectId: "ev-binows",
-      storageBucket: "ev-binows.firebasestorage.app",
-      messagingSenderId: "769525305200",
-      appId: "1:769525305200:web:8d1fbdab5f97577a55c9b5"
-    });
-  }
-  _db = firebase.database();
-  return true;
+// Guard: verifica se Firebase carregou antes de inicializar
+if (typeof firebase === 'undefined') {
+  document.write('<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-app-compat.js"><\/script>');
+  document.write('<script src="https://cdn.jsdelivr.net/npm/firebase@9.23.0/firebase-database-compat.js"><\/script>');
 }
+</script>
+<script>
+firebase.initializeApp({
+  apiKey: "AIzaSyBp5jjj0SaFuN3xK_ZCsHBknntLwP7LG48",
+  authDomain: "ev-binows.firebaseapp.com",
+  databaseURL: "https://ev-binows-default-rtdb.firebaseio.com",
+  projectId: "ev-binows",
+  storageBucket: "ev-binows.firebasestorage.app",
+  messagingSenderId: "769525305200",
+  appId: "1:769525305200:web:8d1fbdab5f97577a55c9b5"
+});
+const _db = firebase.database();
 
 let currentMode    = 'manual';
 let activeFilter   = 'todos';
@@ -473,6 +473,30 @@ const SEASON = '2024-25';
 const WORKER = 'https://round-rain-9e80.vinipaio.workers.dev';
 let _allPlayersCache = null;
 
+// Aliases para jogadores com nomes diferentes na NBA Stats API
+const PLAYER_ALIASES = {
+  'pj washington': 'p.j. washington',
+  'p.j. washington': 'p.j. washington',
+  'ron holland ii': 'ronald holland ii',
+  'ron holland': 'ronald holland ii',
+  'og anunoby': 'o.g. anunoby',
+  'bones hyland': 'bones hyland',
+  'nic claxton': 'nicolas claxton',
+  'nicolas claxton': 'nicolas claxton',
+  'gary trent jr': 'gary trent jr.',
+  'gary trent jr.': 'gary trent jr.',
+  'wendell carter jr': 'wendell carter jr.',
+  'jabari smith jr': 'jabari smith jr.',
+  'jabari smith jr.': 'jabari smith jr.',
+  'kenyon martin jr': 'kenyon martin jr.',
+  'larry nance jr': 'larry nance jr.',
+  'kelly oubre jr': 'kelly oubre jr.',
+  'aj griffin': 'a.j. griffin',
+  'rj barrett': 'r.j. barrett',
+  'tj mcconnell': 't.j. mcconnell',
+  'cj mccollum': 'c.j. mccollum',
+};
+
 async function fetchNBAPlayerID(name) {
   if (NBA_ID_CACHE[name]) return NBA_ID_CACHE[name];
   try {
@@ -483,7 +507,8 @@ async function fetchNBAPlayerID(name) {
     const rows = _allPlayersCache.resultSets[0].rowSet;
     const hdrs = _allPlayersCache.resultSets[0].headers;
     const idIdx = hdrs.indexOf('PERSON_ID'), nameIdx = hdrs.indexOf('DISPLAY_FIRST_LAST');
-    const nameLower = name.toLowerCase().trim();
+    const rawName = name.toLowerCase().trim();
+    const nameLower = PLAYER_ALIASES[rawName] || rawName;
     let match = rows.find(r => r[nameIdx].toLowerCase() === nameLower);
     if (!match) {
       const parts = nameLower.split(' ');
@@ -800,10 +825,11 @@ function renderLive() {
   }).join('');
 }
 
-function onFirebaseReady() {
-  initFirebase();
-  document.getElementById('live-badge').style.display = 'none';
-  // Verifica sessão compartilhada na URL após Firebase pronto
+// Inicialização inline — executa ao fim do parse, Firebase já disponível
+document.getElementById('live-badge').style.display = 'none';
+
+// Sessão compartilhada via ?s=
+(function() {
   const sessaoId = new URLSearchParams(window.location.search).get('s');
   if (!sessaoId) return;
   document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
@@ -819,7 +845,7 @@ function onFirebaseReady() {
     document.getElementById('share-btn').style.display = 'inline-flex';
     renderManual();
   });
-}
+})();
 </script>
 </body>
 </html>
