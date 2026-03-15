@@ -1,1 +1,736 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EV+ NBA Scanner — Binows</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f13; color: #e8e8e8; min-height: 100vh; }
+  .topbar { background: #1a1a2e; border-bottom: 1px solid #2a2a3e; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 600; color: #fff; }
+  .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; }
+  .mode-tabs { display: flex; gap: 4px; background: #0f0f13; border-radius: 8px; padding: 4px; }
+  .mode-tab { font-size: 12px; padding: 6px 16px; border-radius: 6px; border: none; background: transparent; color: #888; cursor: pointer; transition: all 0.15s; }
+  .mode-tab.active { background: #2a2a3e; color: #fff; }
+  .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+  .filter-btn { font-size: 12px; padding: 6px 14px; border-radius: 20px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
+  .filter-btn:hover { border-color: #666; color: #fff; }
+  .filter-btn.active { background: #4caf50; color: #fff; border-color: #4caf50; }
+  .container { max-width: 980px; margin: 0 auto; padding: 24px 16px; }
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+  .metric { background: #1a1a2e; border-radius: 10px; padding: 14px; border: 1px solid #2a2a3e; }
+  .metric-label { font-size: 11px; color: #888; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-val { font-size: 24px; font-weight: 600; }
+  .metric-val.green { color: #4caf50; }
+  .metric-val.white { color: #fff; }
+  .manual-box { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
+  .manual-box h3 { font-size: 13px; color: #aaa; margin-bottom: 12px; font-weight: 500; }
+  .drop-area { border: 2px dashed #3a3a4e; border-radius: 10px; padding: 32px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 12px; }
+  .drop-area:hover, .drop-area.dragover { border-color: #4caf50; background: #1a3d1a22; }
+  .drop-area p { font-size: 13px; color: #666; margin-bottom: 8px; }
+  .drop-area span { font-size: 11px; color: #444; }
+  .drop-area.loaded { border-color: #4caf5066; background: #1a3d1a22; }
+  .drop-area.loaded p { color: #4caf50; }
+  .manual-actions { display: flex; gap: 8px; }
+  .btn-sm { font-size: 12px; padding: 7px 14px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; transition: all 0.15s; }
+  .btn-sm:hover { background: #2a2a3e; color: #fff; }
+  .btn-sm.primary { background: #1a3d1a; color: #4caf50; border-color: #4caf5044; }
+  .btn-sm.primary:hover { background: #245224; }
+  .section-title { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .player-card { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px; margin-bottom: 10px; }
+  .player-card.has-ev { border-left: 3px solid #4caf50; }
+  .player-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
+  .player-name { font-size: 15px; font-weight: 600; color: #fff; }
+  .player-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .market-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; background: #2a2a3e; color: #aaa; }
+  .last5 { font-size: 11px; color: #666; }
+  .last5 span.hit { color: #4caf50; font-weight: 600; }
+  .lines { display: flex; flex-wrap: wrap; gap: 8px; }
+  .line-card { background: #0f0f13; border: 1px solid #2a2a3e; border-radius: 8px; padding: 10px 14px; min-width: 110px; flex: 1; }
+  .line-card.ev-plus { border-color: #4caf5066; background: #1a3d1a22; }
+  .line-card.ev-minus { border-color: #e5393533; }
+  .line-label { font-size: 11px; color: #666; margin-bottom: 4px; }
+  .line-odd { font-size: 16px; font-weight: 600; color: #fff; margin-bottom: 6px; }
+  .line-stats { display: flex; flex-direction: column; gap: 3px; }
+  .line-stat { display: flex; justify-content: space-between; font-size: 11px; }
+  .line-stat-label { color: #555; }
+  .line-stat-val { color: #aaa; }
+  .line-stat-val.pos { color: #4caf50; font-weight: 600; }
+  .line-stat-val.neg { color: #e53935; }
+  .ev-signal { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; margin-top: 5px; display: inline-block; }
+  .ev-signal.pos { background: #1a3d1a; color: #4caf50; border: 1px solid #4caf5044; }
+  .ev-signal.neg { background: #3d1a1a; color: #e53935; border: 1px solid #e5393544; }
+  .ev-signal.neu { background: #2a2a2a; color: #666; border: 1px solid #33333344; }
+  .footer { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; flex-wrap: wrap; gap: 8px; }
+  .footer-txt { font-size: 11px; color: #555; }
+  .refresh-btn { font-size: 13px; padding: 8px 18px; border-radius: 8px; border: 1px solid #3a3a4e; background: transparent; color: #aaa; cursor: pointer; }
+  .refresh-btn:hover { background: #2a2a3e; color: #fff; }
+  .loading { text-align: center; padding: 40px; color: #666; font-size: 14px; }
+  .spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid #333; border-top-color: #4caf50; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; padding: 40px; color: #555; font-size: 14px; line-height: 1.8; }
+  .top-ev { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; padding: 16px 20px; margin-bottom: 20px; display: none; }
+  .top-ev-title { font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+  .top-ev-list { display: flex; flex-direction: column; gap: 6px; }
+  .top-ev-item { display: flex; align-items: center; gap: 12px; padding: 8px 12px; background: #0f0f13; border-radius: 8px; border: 1px solid #2a2a3e; border-left: 3px solid #4caf50; }
+  .top-ev-rank { font-size: 12px; color: #555; width: 18px; text-align: right; flex-shrink: 0; }
+  .top-ev-player { font-size: 13px; font-weight: 600; color: #fff; flex: 1; }
+  .top-ev-line { font-size: 12px; color: #888; }
+  .top-ev-odd { font-size: 13px; color: #ccc; margin-left: auto; }
+  .top-ev-ev { font-size: 13px; font-weight: 700; color: #4caf50; min-width: 56px; text-align: right; }
+  .top-ev-banca { font-size: 11px; color: #4caf5099; min-width: 64px; text-align: right; }
+  .top-ev-last5 { font-size: 11px; color: #555; min-width: 80px; text-align: right; }
+  .live-badge { background: #3d1a1a; color: #ff6b6b; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; border: 1px solid #ff6b6b44; }
+  .req-info { font-size: 11px; color: #4caf50; }
+  @media (max-width: 600px) {
+    .metrics { grid-template-columns: repeat(2, 1fr); }
+    .line-card { min-width: 90px; }
+  }
+</style>
+</head>
+<body>
 
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-dot"></div>
+    EV+ NBA Scanner
+    <span class="live-badge" id="live-badge">AO VIVO</span>
+  </div>
+  <div class="mode-tabs">
+    <button class="mode-tab active" onclick="setMode('manual', this)">📋 Manual (Bet365)</button>
+    <button class="mode-tab" onclick="setMode('live', this)">🌐 Live (Odds API)</button>
+  </div>
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('todos',this)">Todos</button>
+    <button class="filter-btn" onclick="setFilter('pos',this)">Só EV+</button>
+    <button class="filter-btn" onclick="setFilter('pts',this)">Pontos</button>
+    <button class="filter-btn" onclick="setFilter('reb',this)">Rebotes</button>
+    <button class="filter-btn" onclick="setFilter('ast',this)">Assistências</button>
+    <button class="filter-btn" onclick="setFilter('3pts',this)">3 Pts</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="metrics">
+    <div class="metric"><div class="metric-label">EV+ encontrados</div><div class="metric-val green" id="cnt-pos">—</div></div>
+    <div class="metric"><div class="metric-label">Melhor EV+</div><div class="metric-val green" id="best-ev">—</div></div>
+    <div class="metric"><div class="metric-label">Props analisados</div><div class="metric-val white" id="cnt-total">—</div></div>
+    <div class="metric"><div class="metric-label">Atualizado</div><div class="metric-val white" style="font-size:16px" id="last-update">—</div></div>
+  </div>
+
+  <div id="manual-ui">
+    <div class="manual-box">
+      <h3>Importe os JSONs exportados pela extensão — vários de uma vez</h3>
+      <div class="drop-area" id="drop-area" onclick="document.getElementById('file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="handleDrop(event)">
+        <p id="drop-label">Clique aqui ou arraste os arquivos .json</p>
+        <span>Selecione vários de uma vez — rebotes, pontos, assistências, múltiplos jogos</span>
+      </div>
+      <div id="file-chips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px"></div>
+      <input type="file" id="file-input" accept=".json" multiple style="display:none" onchange="handleFiles(this.files)">
+      <div class="manual-actions">
+        <button class="btn-sm primary" onclick="document.getElementById('file-input').click()">📂 Abrir arquivos</button>
+        <button class="btn-sm" onclick="clearData()">✕ Limpar tudo</button>
+      </div>
+    </div>
+    <div class="top-ev" id="top-ev-box">
+      <div class="top-ev-title">🏆 maiores EV+ desta rodada</div>
+      <div id="nba-status" style="display:none;font-size:11px;color:#4caf5099;margin-bottom:8px"></div>
+      <div class="top-ev-list" id="top-ev-list"></div>
+    </div>
+    <div class="section-title" id="manual-section-title" style="display:none">player props — bet365</div>
+    <div id="manual-list"></div>
+  </div>
+
+  <div id="live-ui" style="display:none">
+    <div class="section-title">player props de hoje — NBA</div>
+    <div id="bet-list"><div class="empty">Clique em "Atualizar" para buscar odds ao vivo.</div></div>
+    <div class="footer">
+      <span class="footer-txt">The Odds API · Pinnacle + DraftKings + FanDuel · by Binows</span>
+      <span class="req-info" id="req-info"></span>
+      <button class="refresh-btn" id="refresh-btn" onclick="loadLiveData()">Atualizar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let currentMode  = 'manual';
+let activeFilter = 'todos';
+let allDatasets  = [];
+let allLiveBets  = [];
+
+function setMode(mode, el) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-tab').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('manual-ui').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('live-ui').style.display   = mode === 'live'   ? 'block' : 'none';
+  document.getElementById('live-badge').style.display = mode === 'live'  ? 'inline' : 'none';
+  resetMetrics();
+  if (mode === 'manual' && allDatasets.length) renderManual();
+}
+
+function setFilter(f, el) {
+  activeFilter = f;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  if (currentMode === 'manual' && allDatasets.length) renderManual();
+  else if (currentMode === 'live') renderLive();
+}
+
+function resetMetrics() {
+  ['cnt-pos','best-ev','cnt-total','last-update'].forEach(id => {
+    document.getElementById(id).textContent = '—';
+  });
+}
+
+function poissonCDF(lambda, k) {
+  let prob = 0, term = Math.exp(-lambda);
+  for (let i = 0; i <= k; i++) {
+    prob += term;
+    term *= lambda / (i + 1);
+  }
+  return Math.max(0, Math.min(1, 1 - prob));
+}
+
+function calibrateLambda(p_a, k_a, p_b, k_b) {
+  function bisect(targetP, k) {
+    let lo = 0.1, hi = 60;
+    for (let i = 0; i < 80; i++) {
+      const mid = (lo + hi) / 2;
+      poissonCDF(mid, k) > targetP ? hi = mid : lo = mid;
+    }
+    return (lo + hi) / 2;
+  }
+  const la = bisect(p_a, k_a);
+  const lb = bisect(p_b, k_b);
+  return (la + lb) / 2;
+}
+
+const BET365_MARGIN = 1.07;
+function fairProb(odd) { return (1 / odd) / BET365_MARGIN; }
+function calcEV(prob, odd) { return parseFloat(((prob * odd - 1) * 100).toFixed(1)); }
+
+function calcKelly(prob, odd, last5, lineNum) {
+  if (odd <= 1) return 0;
+  let kelly = Math.max(0, (prob * odd - 1) / (odd - 1)) * 50;
+  kelly = Math.min(kelly, 2.5);
+  if (last5 && last5.length > 0 && lineNum) {
+    const hits = last5.filter(x => x >= lineNum).length;
+    if      (hits === 0) kelly = 0;
+    else if (hits === 1) kelly = Math.min(kelly * 0.2, 0.25);
+    else if (hits === 2) kelly = kelly * 0.4;
+    else if (hits === 3) kelly = kelly * 0.6;
+    else if (hits === 4) kelly = kelly * 0.8;
+  }
+  return parseFloat(kelly.toFixed(2));
+}
+
+function detectMarketByContent(players) {
+  if (!players || players.length === 0) return 'desconhecido';
+  let max = 0;
+  for (const p of players) {
+    for (const label of Object.keys(p.lines || {})) {
+      const n = parseInt(label);
+      if (!isNaN(n) && n > max) max = n;
+    }
+  }
+  if (max <= 8)  return '3pts';
+  if (max <= 15) return 'assistências';
+  if (max <= 25) return 'rebotes';
+  return 'pontos';
+}
+
+const MKT_NAMES  = { rebotes: 'Reb', pontos: 'Pts', assistências: 'Ast', '3pts': '3Pts', desconhecido: '?' };
+const MKT_FILTER = { reb: 'rebotes', pts: 'pontos', ast: 'assistências', '3pts': '3pts' };
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-area').classList.remove('dragover');
+  handleFiles(e.dataTransfer.files);
+}
+
+function handleFiles(files) {
+  if (!files || files.length === 0) return;
+  let loaded = 0;
+  for (const file of files) {
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        if (!data.players || !Array.isArray(data.players)) return;
+        const id = file.name + '_' + (data.scrapedAt || '');
+        if (!allDatasets.find(d => d._id === id)) {
+          data._id       = id;
+          data._filename = file.name;
+          if (!data.market || data.market === 'desconhecido') {
+            const fn = file.name.toLowerCase();
+            if (fn.includes('cesta') || fn.includes('3pt'))         data.market = '3pts';
+            else if (fn.includes('reb') || fn.includes('rebote'))   data.market = 'rebotes';
+            else if (fn.includes('ast') || fn.includes('assist'))   data.market = 'assistências';
+            else if (fn.includes('pts') || fn.includes('pont'))     data.market = 'pontos';
+            else data.market = detectMarketByContent(data.players);
+          }
+          allDatasets.push(data);
+        }
+        loaded++;
+        if (loaded === files.length) { updateChips(); renderManual(); }
+      } catch(e) { console.warn('Erro ao ler', file.name, e); }
+    };
+    reader.readAsText(file);
+  }
+}
+
+function updateChips() {
+  const chips = document.getElementById('file-chips');
+  const drop  = document.getElementById('drop-area');
+  if (allDatasets.length === 0) {
+    chips.innerHTML = '';
+    drop.classList.remove('loaded');
+    document.getElementById('drop-label').textContent = 'Clique aqui ou arraste os arquivos .json';
+    return;
+  }
+  drop.classList.add('loaded');
+  document.getElementById('drop-label').textContent = allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '') + ' carregado' + (allDatasets.length > 1 ? 's' : '');
+  chips.innerHTML = allDatasets.map((d, i) => {
+    const mkt   = MKT_NAMES[d.market] || '?';
+    const count = d.players.length;
+    return `<span style="display:inline-flex;align-items:center;gap:5px;background:#2a2a3e;border:1px solid #3a3a4e;border-radius:20px;padding:3px 10px;font-size:11px;color:#aaa">
+      <span style="color:#4caf50;font-weight:600">${mkt}</span> ${count}j
+      <span onclick="removeDataset(${i})" style="cursor:pointer;color:#555;margin-left:2px">✕</span>
+    </span>`;
+  }).join('');
+}
+
+function removeDataset(i) {
+  allDatasets.splice(i, 1);
+  updateChips();
+  if (allDatasets.length) renderManual();
+  else {
+    document.getElementById('manual-list').innerHTML = '';
+    document.getElementById('manual-section-title').style.display = 'none';
+    document.getElementById('top-ev-box').style.display = 'none';
+    resetMetrics();
+  }
+}
+
+function clearData() {
+  allDatasets = [];
+  updateChips();
+  document.getElementById('manual-list').innerHTML = '';
+  document.getElementById('manual-section-title').style.display = 'none';
+  document.getElementById('top-ev-box').style.display = 'none';
+  document.getElementById('file-input').value = '';
+  resetMetrics();
+}
+
+// NBA STATS
+const NBA_CACHE    = {};
+const NBA_ID_CACHE = {};
+const SEASON       = '2024-25';
+const WORKER       = 'https://round-rain-9e80.vinipaio.workers.dev';
+let _allPlayersCache = null;
+
+async function fetchNBAPlayerID(name) {
+  if (NBA_ID_CACHE[name]) return NBA_ID_CACHE[name];
+  try {
+    if (!_allPlayersCache) {
+      const res = await fetch(`${WORKER}/nba/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=1`);
+      _allPlayersCache = await res.json();
+    }
+    const rows = _allPlayersCache.resultSets[0].rowSet;
+    const hdrs = _allPlayersCache.resultSets[0].headers;
+    const idIdx   = hdrs.indexOf('PERSON_ID');
+    const nameIdx = hdrs.indexOf('DISPLAY_FIRST_LAST');
+    const nameLower = name.toLowerCase().trim();
+    let match = rows.find(r => r[nameIdx].toLowerCase() === nameLower);
+    if (!match) {
+      const parts = nameLower.split(' ');
+      match = rows.find(r => {
+        const rn = r[nameIdx].toLowerCase();
+        return parts.every(p => rn.includes(p));
+      });
+    }
+    if (!match) { console.warn('Jogador não encontrado:', name); return null; }
+    NBA_ID_CACHE[name] = match[idIdx];
+    return match[idIdx];
+  } catch(e) { console.error('fetchNBAPlayerID error:', e); return null; }
+}
+
+async function fetchNBAGameLogs(playerName) {
+  const cached = NBA_CACHE[playerName];
+  if (cached && (Date.now() - cached.ts) < 3600000) return cached.logs;
+  try {
+    const playerId = await fetchNBAPlayerID(playerName);
+    if (!playerId) return null;
+    const res  = await fetch(`${WORKER}/nba/playergamelog?PlayerID=${playerId}&Season=${SEASON}&SeasonType=Regular%20Season&PerMode=PerGame`);
+    const data = await res.json();
+    const rows = data.resultSets[0].rowSet;
+    const hdrs = data.resultSets[0].headers;
+    const pts = hdrs.indexOf('PTS');
+    const reb = hdrs.indexOf('REB');
+    const ast = hdrs.indexOf('AST');
+    const fg3 = hdrs.indexOf('FG3M') !== -1 ? hdrs.indexOf('FG3M') : hdrs.indexOf('FG3_M');
+    const logs = rows.map(r => ({
+      pts: r[pts] ?? 0,
+      reb: r[reb] ?? 0,
+      ast: r[ast] ?? 0,
+      fg3: fg3 !== -1 ? (r[fg3] ?? 0) : 0
+    }));
+    NBA_CACHE[playerName] = { logs, ts: Date.now() };
+    return logs;
+  } catch(e) { console.error('fetchNBAGameLogs error:', playerName, e); return null; }
+}
+
+function calcSeasonHitRate(logs, market, lineNum) {
+  if (!logs || logs.length === 0) return null;
+  const key = { pontos: 'pts', rebotes: 'reb', assistências: 'ast', '3pts': 'fg3' }[market];
+  if (!key) return null;
+  const hits = logs.filter(g => g[key] >= lineNum).length;
+  return { hits, games: logs.length, pct: Math.round(hits / logs.length * 100) };
+}
+
+function calcKellyFromSeason(prob, odd, seasonHR) {
+  if (odd <= 1) return 0;
+  let kelly = Math.max(0, (prob * odd - 1) / (odd - 1)) * 50;
+  kelly = Math.min(kelly, 2.5);
+  if (seasonHR) {
+    const pct = seasonHR.pct / 100;
+    if      (pct === 0)  kelly = 0;
+    else if (pct < 0.20) kelly = Math.min(kelly * 0.2, 0.25);
+    else if (pct < 0.40) kelly = kelly * 0.4;
+    else if (pct < 0.55) kelly = kelly * 0.6;
+    else if (pct < 0.70) kelly = kelly * 0.8;
+  }
+  return parseFloat(kelly.toFixed(2));
+}
+
+async function loadSeasonStats(players) {
+  const statusEl = document.getElementById('nba-status');
+  if (statusEl) { statusEl.textContent = '⏳ Buscando stats da temporada...'; statusEl.style.display = 'block'; }
+  const unique = [...new Map(players.map(p => [p.player + '|' + p.market, p])).values()];
+  let done = 0;
+  const results = await Promise.all(unique.map(async (p) => {
+    const logs = await fetchNBAGameLogs(p.player);
+    done++;
+    if (statusEl) statusEl.textContent = `⏳ Stats da temporada: ${done}/${unique.length}...`;
+    return { player: p.player, market: p.market, logs };
+  }));
+  for (const { player, market, logs } of results) {
+    if (logs) updatePlayerCards(player, market, logs);
+  }
+  renderTopEVFromDOM();
+  if (statusEl) {
+    statusEl.textContent = '✓ Stats da temporada carregados';
+    setTimeout(() => { statusEl.style.display = 'none'; }, 3000);
+  }
+}
+
+function updatePlayerCards(playerName, market, logs) {
+  const slug  = playerSlug(playerName);
+  const cards = document.querySelectorAll(`[data-player="${slug}"]`);
+  cards.forEach(card => {
+    const lineNum = parseInt(card.getAttribute('data-line'));
+    const odd     = parseFloat(card.getAttribute('data-odd'));
+    const prob    = parseFloat(card.getAttribute('data-prob'));
+    if (isNaN(lineNum) || isNaN(odd)) return;
+    const hr = calcSeasonHitRate(logs, market, lineNum);
+    if (!hr) return;
+    const kelly = calcKellyFromSeason(prob, odd, hr);
+    const hrEl = card.querySelector('.season-hr');
+    if (hrEl) hrEl.textContent = `${hr.hits}/${hr.games} (${hr.pct}%)`;
+    const kellyEl = card.querySelector('.kelly-val');
+    if (kellyEl) {
+      kellyEl.textContent = kelly > 0 ? kelly.toFixed(2) + '%' : '—';
+      kellyEl.className   = 'line-stat-val kelly-val' + (kelly > 0 ? ' pos' : '');
+    }
+    card.setAttribute('data-kelly', kelly);
+  });
+}
+
+function playerSlug(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+}
+
+function renderTopEVFromDOM() {
+  const cards = document.querySelectorAll('[data-player][data-ev]');
+  const items = [];
+  cards.forEach(card => {
+    const ev = parseFloat(card.getAttribute('data-ev'));
+    if (ev <= 3) return;
+    items.push({
+      player:   card.getAttribute('data-name'),
+      market:   card.getAttribute('data-market'),
+      mktLabel: card.getAttribute('data-mktlabel'),
+      label:    card.getAttribute('data-label'),
+      odd:      parseFloat(card.getAttribute('data-odd')),
+      ev,
+      kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
+      lineNum:  parseInt(card.getAttribute('data-line')),
+      last5:    JSON.parse(card.getAttribute('data-last5') || '[]')
+    });
+  });
+  items.sort((a, b) => b.ev - a.ev);
+  renderTopEV(items);
+}
+
+function renderManual() {
+  if (!allDatasets.length) return;
+  let allPlayers = [];
+  let latestScrapedAt = null;
+  for (const ds of allDatasets) {
+    const mkt = ds.market || 'desconhecido';
+    for (const p of ds.players) { allPlayers.push({ ...p, market: mkt }); }
+    if (!latestScrapedAt || ds.scrapedAt > latestScrapedAt) latestScrapedAt = ds.scrapedAt;
+  }
+  if (activeFilter === 'reb')       allPlayers = allPlayers.filter(p => p.market === 'rebotes');
+  else if (activeFilter === 'pts')  allPlayers = allPlayers.filter(p => p.market === 'pontos');
+  else if (activeFilter === 'ast')  allPlayers = allPlayers.filter(p => p.market === 'assistências');
+  else if (activeFilter === '3pts') allPlayers = allPlayers.filter(p => p.market === '3pts');
+  else if (activeFilter === 'pos')  allPlayers = allPlayers.filter(p => hasEVPlus(p));
+
+  const list    = document.getElementById('manual-list');
+  const titleEl = document.getElementById('manual-section-title');
+  if (allPlayers.length === 0) {
+    list.innerHTML = '<div class="empty">Nenhum resultado para este filtro.</div>';
+    titleEl.style.display = 'none';
+    document.getElementById('top-ev-box').style.display = 'none';
+    return;
+  }
+  titleEl.style.display = 'block';
+  titleEl.textContent   = 'player props — ' + allDatasets.length + ' arquivo' + (allDatasets.length > 1 ? 's' : '');
+
+  let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
+  const topEVItems = [];
+
+  const html = allPlayers.map(p => {
+    const mkt      = p.market || 'desconhecido';
+    const mktLabel = MKT_NAMES[mkt] || mkt;
+    const linesEntries = Object.entries(p.lines || {});
+    if (linesEntries.length < 2) return '';
+    const sorted = linesEntries
+      .map(([label, odd]) => ({ label, odd, k: parseInt(label) - 1 }))
+      .filter(x => !isNaN(x.k) && x.odd >= 1.01)
+      .sort((a, b) => a.k - b.k);
+    let lambda = null;
+    if (sorted.length >= 2) {
+      const first = sorted[0], last = sorted[sorted.length - 1];
+      try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); } catch(e) {}
+    }
+    const last5 = p.last5 || [];
+    let playerHasEV = false;
+    const slug = playerSlug(p.player);
+
+    const lineCards = sorted.map(({ label, odd, k }) => {
+      let prob = fairProb(odd), ev = 0, kelly = 0;
+      if (lambda !== null) {
+        prob  = poissonCDF(lambda, k);
+        ev    = calcEV(prob, odd);
+        kelly = parseFloat(Math.min(Math.max(0, (prob * odd - 1) / (odd - 1)) * 50, 2.5).toFixed(2));
+      }
+      totalLines++;
+      if (ev > 3) {
+        evPlusCount++; playerHasEV = true;
+        topEVItems.push({ player: p.player, market: mkt, mktLabel, label, odd, ev, kelly, lineNum: parseInt(label), last5 });
+      }
+      if (ev > bestEV) bestEV = ev;
+      const cls    = ev > 3 ? 'ev-plus' : ev < -3 ? 'ev-minus' : '';
+      const sigCls = ev > 3 ? 'pos'     : ev < -3 ? 'neg'      : 'neu';
+      const sigTxt = ev > 3 ? 'EV+'     : ev < -3 ? 'EV−'      : 'neutro';
+      const lineNum = parseInt(label);
+      return `<div class="line-card ${cls}"
+        data-player="${slug}" data-name="${p.player}" data-market="${mkt}" data-mktlabel="${mktLabel}"
+        data-label="${label}" data-line="${lineNum}" data-odd="${odd}" data-prob="${prob.toFixed(4)}"
+        data-ev="${ev}" data-kelly="${kelly}" data-last5='${JSON.stringify(last5)}'>
+        <div class="line-label">${label} ${mktLabel.toLowerCase()}</div>
+        <div class="line-odd">${odd.toFixed(2)}</div>
+        <div class="line-stats">
+          <div class="line-stat"><span class="line-stat-label">Prob. fair</span><span class="line-stat-val">${(prob*100).toFixed(1)}%</span></div>
+          <div class="line-stat"><span class="line-stat-label">EV</span><span class="line-stat-val ${sigCls}">${ev>0?'+':''}${ev}%</span></div>
+          <div class="line-stat"><span class="line-stat-label">% da banca</span><span class="line-stat-val kelly-val ${kelly>0?'pos':''}">${kelly>0?kelly+'%':'—'}</span></div>
+          <div class="line-stat"><span class="line-stat-label">Hit rate temporada</span><span class="line-stat-val season-hr" style="color:#555">carregando...</span></div>
+        </div>
+        <span class="ev-signal ${sigCls}">${sigTxt}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="player-card${playerHasEV ? ' has-ev' : ''}">
+      <div class="player-header">
+        <div class="player-name">${p.player}</div>
+        <div class="player-meta">
+          <span class="market-badge">${mkt}</span>
+          ${lambda !== null ? `<span class="last5" style="color:#555">λ=${lambda.toFixed(2)}</span>` : ''}
+        </div>
+      </div>
+      <div class="lines">${lineCards}</div>
+    </div>`;
+  }).join('');
+
+  list.innerHTML = html || '<div class="empty">Nenhum jogador com dados suficientes.</div>';
+  topEVItems.sort((a, b) => b.ev - a.ev);
+  renderTopEV(topEVItems);
+  document.getElementById('cnt-pos').textContent    = evPlusCount;
+  document.getElementById('cnt-total').textContent  = totalLines;
+  document.getElementById('best-ev').textContent    = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+  document.getElementById('last-update').textContent = latestScrapedAt
+    ? new Date(latestScrapedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : '—';
+  loadSeasonStats(allPlayers);
+}
+
+function hasEVPlus(p) {
+  const sorted = Object.entries(p.lines || {})
+    .map(([label, odd]) => ({ odd, k: parseInt(label) - 1 }))
+    .filter(x => !isNaN(x.k) && x.odd >= 1.01)
+    .sort((a, b) => a.k - b.k);
+  if (sorted.length < 2) return false;
+  const first = sorted[0], last = sorted[sorted.length - 1];
+  let lambda;
+  try { lambda = calibrateLambda(fairProb(first.odd), first.k, fairProb(last.odd), last.k); }
+  catch(e) { return false; }
+  return sorted.some(({ odd, k }) => calcEV(poissonCDF(lambda, k), odd) > 3);
+}
+
+function renderTopEV(topList) {
+  const box  = document.getElementById('top-ev-box');
+  const list = document.getElementById('top-ev-list');
+  if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  list.innerHTML = topList.slice(0, 10).map((item, i) => {
+    const hitStr = item.last5.length > 0
+      ? item.last5.filter(x => x >= item.lineNum).length + '/' + item.last5.length
+      : '';
+    return `<div class="top-ev-item">
+      <span class="top-ev-rank">${i + 1}</span>
+      <span class="top-ev-player">${item.player}</span>
+      <span class="top-ev-line">${item.label} <span style="color:#555;font-size:10px">${item.mktLabel}</span></span>
+      <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
+      <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
+      <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
+      <span class="top-ev-last5">${hitStr ? 'Últ.5: ' + hitStr : ''}</span>
+    </div>`;
+  }).join('');
+}
+
+// LIVE MODE
+const BASE      = WORKER + '/odds';
+const SPORT     = 'basketball_nba';
+const MARKETS   = 'player_points,player_rebounds,player_assists';
+const BOOKS     = 'pinnacle,draftkings,fanduel';
+const MKT_LABEL = { player_points:'pontos', player_rebounds:'rebotes', player_assists:'assistências' };
+const MKT_TYPE  = { player_points:'pts', player_rebounds:'reb', player_assists:'ast' };
+
+function toDecimal(o) {
+  return o > 0 ? parseFloat((o/100+1).toFixed(3)) : parseFloat((100/Math.abs(o)+1).toFixed(3));
+}
+function getFairProb(oddsArr) {
+  const total = oddsArr.reduce((s, o) => s + 1/o, 0);
+  return parseFloat((oddsArr.map(o => (1/o)/total*100).reduce((s,p)=>s+p,0)/oddsArr.length).toFixed(1));
+}
+function livEV(p, o)    { return parseFloat(((p/100*o-1)*100).toFixed(1)); }
+function livKelly(p, o) { return parseFloat((Math.min(Math.max(0,(p/100*o-1)/(o-1)*100/2), 2.5)).toFixed(1)); }
+
+async function loadLiveData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.textContent = 'Atualizando...'; btn.disabled = true;
+  document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>Buscando jogos...</div>';
+  try {
+    const evRes = await fetch(BASE + '/sports/' + SPORT + '/events');
+    if (!evRes.ok) throw new Error('Erro ' + evRes.status);
+    const events = await evRes.json();
+    if (!Array.isArray(events) || events.length === 0) {
+      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo encontrado.</div>';
+      btn.textContent = 'Atualizar'; btn.disabled = false; return;
+    }
+    const agora = new Date();
+    let jogos = events.filter(e => new Date(e.commence_time) > agora).slice(0, 4);
+    if (jogos.length === 0) {
+      document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhum jogo futuro hoje.</div>';
+      btn.textContent = 'Atualizar'; btn.disabled = false; return;
+    }
+    const bets = [];
+    for (const ev of jogos) {
+      document.getElementById('bet-list').innerHTML = '<div class="loading"><span class="spinner"></span>' + ev.away_team + ' @ ' + ev.home_team + '...</div>';
+      const pRes = await fetch(BASE + '/sports/' + SPORT + '/events/' + ev.id + '/odds?regions=us&markets=' + MARKETS + '&bookmakers=' + BOOKS + '&oddsFormat=american');
+      if (!pRes.ok) continue;
+      const rem = pRes.headers.get('x-requests-remaining');
+      if (rem) document.getElementById('req-info').textContent = rem + ' req restantes';
+      const pData = await pRes.json();
+      if (!pData.bookmakers || pData.bookmakers.length === 0) continue;
+      const gameStr  = ev.away_team + ' @ ' + ev.home_team;
+      const playerMap = {};
+      for (const book of pData.bookmakers) {
+        for (const mkt of book.markets) {
+          if (!MKT_LABEL[mkt.key]) continue;
+          for (const out of mkt.outcomes) {
+            if (out.name !== 'Over') continue;
+            const k = out.description + '||' + mkt.key + '||' + out.point;
+            if (!playerMap[k]) playerMap[k] = { player: out.description, label: MKT_LABEL[mkt.key], type: MKT_TYPE[mkt.key], line: out.point, game: gameStr, odds: [], books: [] };
+            playerMap[k].odds.push(toDecimal(out.price));
+            playerMap[k].books.push(book.key);
+          }
+        }
+      }
+      for (const d of Object.values(playerMap)) {
+        if (d.odds.length < 2) continue;
+        const bestOdd  = Math.max(...d.odds);
+        const bestBook = d.books[d.odds.indexOf(bestOdd)];
+        const fp = getFairProb(d.odds);
+        bets.push({ player: d.player, market: d.line + '+ ' + d.label, type: d.type, game: d.game, prob: fp, odd: bestOdd, book: bestBook, kelly: livKelly(fp, bestOdd), ev: livEV(fp, bestOdd), n: d.odds.length });
+      }
+    }
+    allLiveBets = bets.sort((a, b) => b.ev - a.ev);
+    const pos = allLiveBets.filter(b => b.ev > 2);
+    document.getElementById('cnt-pos').textContent  = pos.length;
+    document.getElementById('cnt-total').textContent = allLiveBets.length;
+    const bestEV = pos.length > 0 ? Math.max(...pos.map(b => b.ev)) : 0;
+    document.getElementById('best-ev').textContent  = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    renderLive();
+  } catch(e) {
+    document.getElementById('bet-list').innerHTML = '<div class="empty">Erro: ' + e.message + '</div>';
+  }
+  btn.textContent = 'Atualizar'; btn.disabled = false;
+}
+
+function renderLive() {
+  let data = allLiveBets;
+  if (activeFilter === 'pos') data = data.filter(b => b.ev > 2);
+  if (activeFilter === 'pts') data = data.filter(b => b.type === 'pts');
+  if (activeFilter === 'reb') data = data.filter(b => b.type === 'reb');
+  if (activeFilter === 'ast') data = data.filter(b => b.type === 'ast');
+  if (data.length === 0) { document.getElementById('bet-list').innerHTML = '<div class="empty">Nenhuma aposta encontrada.</div>'; return; }
+  document.getElementById('bet-list').innerHTML = data.map(b => {
+    const sig = b.ev > 2 ? '🟢' : b.ev < -2 ? '🔴' : '⬜';
+    const bc  = b.ev > 2 ? 'pos' : b.ev < -2 ? 'neg' : 'neu';
+    const bt  = b.ev > 2 ? '+'+b.ev+'%' : b.ev < -2 ? b.ev+'%' : 'neutro';
+    return `<div class="player-card" style="display:flex;align-items:center;justify-content:space-between;gap:16px;border-left:3px solid ${b.ev>2?'#4caf50':b.ev<-2?'#e53935':'#666'}">
+      <div style="flex:1;min-width:0">
+        <div class="player-header" style="margin-bottom:8px">
+          <span class="player-name">${b.player}</span>
+          <span class="market-badge">${b.market}</span>
+        </div>
+        <div style="font-size:11px;color:#555;margin-bottom:8px">${b.game}</div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">prob. fair</span><span class="line-stat-val">${b.prob}%</span></div>
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">casas</span><span class="line-stat-val">${b.n}</span></div>
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">melhor em</span><span class="line-stat-val">${b.book}</span></div>
+          <div class="line-stat"><span class="line-stat-label" style="margin-right:4px">% da banca</span><span class="line-stat-val ${b.kelly>0?'pos':''}">${b.kelly>0?b.kelly+'%':'—'}</span></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+        <span style="font-size:20px">${sig}</span>
+        <span class="ev-signal ${bc}">EV ${bt}</span>
+        <span style="font-size:14px;font-weight:600;color:#fff">odd ${b.odd.toFixed(2)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('live-badge').style.display = 'none';
+</script>
+</body>
+</html>
