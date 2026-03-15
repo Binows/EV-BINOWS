@@ -858,7 +858,15 @@ function handleFiles(files) {
     reader.onload = ev => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (!data.players || !Array.isArray(data.players)) return;
+
+        // Suporta dois formatos:
+        // 1. Formato novo (background v2): dataset já separado com market='duplo-duplo'/'triplo-duplo'
+        //    e binaryPlayers populado diretamente
+        // 2. Formato antigo: dataset de pontos/rebotes com binaryPlayers embutido
+        const isBinaryDataset = (data.market === 'duplo-duplo' || data.market === 'triplo-duplo')
+                                 && data.binaryPlayers?.length > 0;
+
+        if (!isBinaryDataset && (!data.players || !Array.isArray(data.players))) return;
         const id = file.name + '_' + (data.scrapedAt || '');
         if (!allDatasets.find(d => d._id === id)) {
           data._id = id; data._filename = file.name;
@@ -872,7 +880,18 @@ function handleFiles(files) {
             else data.market = detectMarketByContent(data.players);
           }
           allDatasets.push(data);
-          if (data.binaryPlayers && data.binaryPlayers.length > 0) {
+
+          // Formato novo: dataset já separado com binaryPlayers
+          if (isBinaryDataset) {
+            // Converte para formato interno de players binários
+            data.players = data.binaryPlayers.map(p => ({
+              player: p.player, last5: p.last5,
+              lines: { 'Sim': p.oddSim }, oddNao: p.oddNao, binary: true
+            }));
+          }
+
+          // Formato antigo: extrai binaryPlayers embutidos num dataset normal
+          if (!isBinaryDataset && data.binaryPlayers && data.binaryPlayers.length > 0) {
             const ddPlayers = data.binaryPlayers.filter(p => p.market === 'duplo-duplo');
             const tdPlayers = data.binaryPlayers.filter(p => p.market === 'triplo-duplo');
             if (ddPlayers.length > 0) {
@@ -891,7 +910,13 @@ function handleFiles(files) {
         }
         loaded++;
         if (loaded === files.length) {
-          refLoaded = false; // reseta cache DK ao importar novos dados
+          refLoaded = false;
+          // Reseta filtro para 'todos' ao importar — evita ficar preso num mercado
+          if (activeFilter !== 'todos' && activeFilter !== 'pos') {
+            activeFilter = 'todos';
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            document.querySelector('.filter-btn')?.classList.add('active'); // primeiro botão = Todos
+          }
           updateChips();
           renderManual();
         }
