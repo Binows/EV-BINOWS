@@ -210,6 +210,9 @@
 
   .player-card.hidden-search { display: none; }
 
+  /* FIX: card sem match no DK fica esmaecido */
+  .line-card.dk-no-match { opacity: 0.35; }
+
   @media (max-width: 600px) {
     .metrics { grid-template-columns: repeat(2, 1fr); }
     .line-card { min-width: 90px; }
@@ -248,7 +251,6 @@
     </div>
     <div class="ev-toggle">
       <button class="ev-toggle-btn active" id="toggle-season" onclick="setEVMode('season', this)">📊 Temporada</button>
-      <!-- FIX #1: botão agora usa 'dk' como value, não 'pinnacle' -->
       <button class="ev-toggle-btn dk" id="toggle-dk" onclick="setEVMode('dk', this)">📌 DraftKings</button>
     </div>
   </div>
@@ -324,29 +326,33 @@ let activeFilter = 'todos';
 let allDatasets  = [];
 let allLiveBets  = [];
 let oddThreshold = 2.00;
-// FIX #1: evMode usa 'season' | 'dk' — consistente em TODO o código
 let evMode       = 'season';
 let playerSearch = '';
 let refCache     = {};
 let refLoaded    = false;
 
+// ─── FIX 1: onThresholdChange também atualiza métricas no modo DK ───────────
 function onThresholdChange(val) {
   const n = parseFloat(val);
   if (isNaN(n) || n < 1.01) return;
   oddThreshold = n;
   document.getElementById('threshold-display').textContent = n.toFixed(2);
   applyHighValueHighlight();
+  // Se estiver no modo DK, recalcula métricas com o novo threshold
+  if (evMode === 'dk') updateMetricsFromDOM();
 }
 
+// ─── FIX 2: onPlayerSearch funciona no modo DK também ────────────────────────
 function onPlayerSearch(val) {
   playerSearch = val.toLowerCase().trim();
+  // Busca tanto em .player-card quanto em cards com data-player (modo DK usa os mesmos)
   document.querySelectorAll('.player-card').forEach(card => {
-    const name = (card.querySelector('.player-name')?.textContent || '').toLowerCase();
+    const nameEl = card.querySelector('.player-name');
+    const name = (nameEl?.textContent || '').toLowerCase();
     card.classList.toggle('hidden-search', playerSearch !== '' && !name.includes(playerSearch));
   });
 }
 
-// FIX #1: setEVMode agora recebe 'season' ou 'dk' — sem 'pinnacle'
 function setEVMode(mode, el) {
   evMode = mode;
   document.querySelectorAll('.ev-toggle-btn').forEach(b => b.classList.remove('active'));
@@ -358,13 +364,24 @@ function setEVMode(mode, el) {
   }
 }
 
-// FIX #2: applyEVModeToCards usa 'dk' de forma consistente
+// ─── FIX 3: applyEVModeToCards atualiza métricas e respeita activeFilter ─────
 function applyEVModeToCards() {
   const isDK = evMode === 'dk';
 
   document.querySelectorAll('[data-player]').forEach(card => {
+    // FIX 3a: no modo DK, cards sem match ficam esmaecidos (não simplesmente sumidos)
+    const evPinnacle = card.getAttribute('data-ev-pinnacle');
+    if (isDK && evPinnacle === 'NaN') {
+      card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
+      card.classList.add('dk-no-match');
+      const signalEl = card.querySelector('.ev-signal');
+      if (signalEl) { signalEl.textContent = 'sem match DK'; signalEl.className = 'ev-signal neu'; }
+      return;
+    }
+    card.classList.remove('dk-no-match');
+
     const evRaw = isDK
-      ? card.getAttribute('data-ev-pinnacle')
+      ? evPinnacle
       : (card.getAttribute('data-ev-season') || card.getAttribute('data-ev'));
 
     const ev = parseFloat(evRaw || 'NaN');
@@ -407,7 +424,65 @@ function applyEVModeToCards() {
     }
   });
 
+  // FIX 3b: aplica filtro de mercado mesmo no modo DK
+  applyActiveFilterToCards();
+
+  // FIX 3c: recalcula métricas após atualizar os cards
+  updateMetricsFromDOM();
+
   renderTopEVFromDOM();
+}
+
+// ─── FIX 3b: aplica activeFilter sobre os .player-card no modo DK ────────────
+function applyActiveFilterToCards() {
+  if (activeFilter === 'todos' || activeFilter === 'pos') {
+    // 'pos' é tratado por visibilidade de EV, não por mercado
+    document.querySelectorAll('.player-card[data-market-type]').forEach(card => {
+      card.style.display = '';
+    });
+    if (activeFilter === 'pos') {
+      // Esconde player-cards que não têm nenhum line-card com ev-plus ou ev-plus-dk
+      document.querySelectorAll('.player-card').forEach(card => {
+        const hasEV = card.querySelector('.ev-plus, .ev-plus-dk');
+        card.style.display = hasEV ? '' : 'none';
+      });
+    }
+    return;
+  }
+  const filterMap = { pts: 'pontos', reb: 'rebotes', ast: 'assistências', '3pts': '3pts' };
+  const wantedMarket = filterMap[activeFilter];
+  if (!wantedMarket) return;
+  document.querySelectorAll('.player-card[data-market-type]').forEach(card => {
+    card.style.display = card.getAttribute('data-market-type') === wantedMarket ? '' : 'none';
+  });
+}
+
+// ─── FIX 4: updateMetricsFromDOM — lê EV correto do DOM no modo DK ───────────
+function updateMetricsFromDOM() {
+  const isDK = evMode === 'dk';
+  let evPlusCount = 0, bestEV = -Infinity;
+
+  document.querySelectorAll('[data-player][data-odd]').forEach(card => {
+    // Ignora cards de player-card (containers), só line-cards
+    if (card.classList.contains('player-card')) return;
+
+    let ev;
+    if (isDK) {
+      ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
+      if (isNaN(ev)) return;
+    } else {
+      ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
+      if (isNaN(ev)) return;
+    }
+
+    if (ev > 3) {
+      evPlusCount++;
+      if (ev > bestEV) bestEV = ev;
+    }
+  });
+
+  document.getElementById('cnt-pos').textContent  = evPlusCount > 0 ? evPlusCount : '0';
+  document.getElementById('best-ev').textContent  = bestEV > 0 ? '+' + bestEV.toFixed(1) + '%' : '—';
 }
 
 const MKT_API = { pontos: 'player_points', rebotes: 'player_rebounds', assistências: 'player_assists', '3pts': 'player_threes' };
@@ -458,30 +533,22 @@ async function loadRefOdds() {
     console.log('[DK] Cache keys (primeiros 10):', Object.keys(refCache).slice(0, 10));
     console.log('[DK] Total props no cache:', Object.keys(refCache).length);
 
-    // Nova estratégia: o DK tem UMA linha por jogador/mercado (ex: Over 9.5)
-    // A Bet365 tem VÁRIAS linhas (10+, 15+, 20+, 25+)
-    // Usamos a odd do DK para calibrar o lambda e avaliar TODAS as linhas da Bet365
-
-    // Passo 1: montar lambdaCache por jogador+mercado usando a linha do DK como âncora
-    const lambdaDK = {}; // slug|market → { lambda, dkLine, dkOdd }
+    // Estratégia: DK tem UMA linha âncora por jogador/mercado (ex: Over 9.5)
+    // Calibra lambda pela âncora e avalia TODAS as linhas da Bet365
+    const lambdaDK = {};
     const DK_MARGIN = 1.06;
 
     for (const [key, dkOdd] of Object.entries(refCache)) {
       const [slug, market, lineStr] = key.split('|');
-      const dkLine = parseFloat(lineStr); // ex: 9.5
+      const dkLine = parseFloat(lineStr);
       if (isNaN(dkLine)) continue;
 
-      // prob fair do DK para Over dkLine
       const probFair = (1 / dkOdd) / DK_MARGIN;
-
-      // k para Poisson: Over 9.5 → precisa fazer 10+ → k=9 (inteiro abaixo)
       const k = Math.floor(dkLine);
 
-      // Calibra lambda via bissecção: P(X > k) = probFair
       let lo = 0.1, hi = 80;
       for (let i = 0; i < 80; i++) {
         const mid = (lo + hi) / 2;
-        // P(X >= k+1) = 1 - CDF(k)
         let cdf = 0, term = Math.exp(-mid);
         for (let j = 0; j <= k; j++) { cdf += term; term *= mid / (j + 1); }
         const pOver = Math.max(0, Math.min(1, 1 - cdf));
@@ -493,12 +560,14 @@ async function loadRefOdds() {
 
     console.log('[DK] Lambdas calibrados:', Object.keys(lambdaDK).length);
 
-    // Passo 2: aplicar lambda do DK em cada card da Bet365
     let matched = 0, unmatched = 0;
     document.querySelectorAll('[data-player][data-line]').forEach(card => {
+      // Só processa line-cards (não player-cards containers)
+      if (card.classList.contains('player-card')) return;
+
       const slug    = card.getAttribute('data-player');
       const market  = card.getAttribute('data-market');
-      const lineNum = parseFloat(card.getAttribute('data-line')); // ex: 10 (para "10+")
+      const lineNum = parseFloat(card.getAttribute('data-line'));
       const oddB365 = parseFloat(card.getAttribute('data-odd'));
 
       if (isNaN(lineNum) || isNaN(oddB365)) return;
@@ -510,8 +579,8 @@ async function loadRefOdds() {
         return;
       }
 
-      // Calcula prob fair da linha da Bet365 usando o lambda calibrado pelo DK
-      // "10+" → P(X >= 10) → k=9
+      // Calcula prob fair da linha da Bet365 com lambda calibrado pelo DK
+      // "10+" → P(X >= 10) → k = lineNum - 1
       const k = lineNum - 1;
       let cdf = 0, term = Math.exp(-ref.lambda);
       for (let j = 0; j <= k; j++) { cdf += term; term *= ref.lambda / (j + 1); }
@@ -528,9 +597,9 @@ async function loadRefOdds() {
     console.log(`[DK] Matching: ${matched} matched, ${unmatched} sem match`);
 
     refLoaded = true;
-    applyEVModeToCards();
+    applyEVModeToCards(); // isso agora também chama updateMetricsFromDOM()
     if (statusEl) {
-      statusEl.textContent = `✓ DraftKings: ${fetched} jogos, ${Object.keys(refCache).length} props (${matched} matched)`;
+      statusEl.textContent = `✓ DraftKings: ${fetched} jogos, ${Object.keys(refCache).length} props (${matched} matched, ${unmatched} sem match)`;
       setTimeout(() => statusEl.style.display = 'none', 5000);
     }
   } catch(e) {
@@ -561,12 +630,23 @@ function setMode(mode, el) {
   if (mode === 'manual' && allDatasets.length) renderManual();
 }
 
+// ─── FIX 5: setFilter aplica filtro no modo DK sem re-renderizar tudo ─────────
 function setFilter(f, el) {
   activeFilter = f;
   document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
   el.classList.add('active');
-  if (currentMode === 'manual' && allDatasets.length) renderManual();
-  else if (currentMode === 'live') renderLive();
+  if (currentMode === 'manual') {
+    if (evMode === 'dk' && allDatasets.length) {
+      // No modo DK, filtra diretamente no DOM sem re-renderizar
+      applyActiveFilterToCards();
+      updateMetricsFromDOM();
+      renderTopEVFromDOM();
+    } else if (allDatasets.length) {
+      renderManual();
+    }
+  } else if (currentMode === 'live') {
+    renderLive();
+  }
 }
 
 function resetMetrics() {
@@ -688,7 +768,6 @@ function handleFiles(files) {
             else data.market = detectMarketByContent(data.players);
           }
           allDatasets.push(data);
-          // Extrai duplo/triplo duplo como datasets separados
           if (data.binaryPlayers && data.binaryPlayers.length > 0) {
             const ddPlayers = data.binaryPlayers.filter(p => p.market === 'duplo-duplo');
             const tdPlayers = data.binaryPlayers.filter(p => p.market === 'triplo-duplo');
@@ -707,7 +786,11 @@ function handleFiles(files) {
           }
         }
         loaded++;
-        if (loaded === files.length) { updateChips(); renderManual(); }
+        if (loaded === files.length) {
+          refLoaded = false; // reseta cache DK ao importar novos dados
+          updateChips();
+          renderManual();
+        }
       } catch(e) { console.warn('Erro ao ler', file.name, e); }
     };
     reader.readAsText(file);
@@ -739,6 +822,7 @@ function updateChips() {
 
 function removeDataset(i) {
   allDatasets.splice(i, 1);
+  refLoaded = false;
   updateChips();
   if (allDatasets.length) renderManual();
   else {
@@ -752,6 +836,7 @@ function removeDataset(i) {
 
 function clearData() {
   allDatasets = [];
+  refLoaded = false;
   updateChips();
   document.getElementById('manual-list').innerHTML = '';
   document.getElementById('manual-section-title').style.display = 'none';
@@ -897,6 +982,7 @@ async function loadSeasonStats(players) {
     if (logs) updatePlayerCards(player, market, logs);
   }
   renderTopEVFromDOM();
+  updateMetricsFromDOM(); // FIX: atualiza métricas após carregar stats
   if (statusEl) { statusEl.textContent = '✓ Stats da temporada carregados'; setTimeout(() => { statusEl.style.display = 'none'; }, 3000); }
 }
 
@@ -904,6 +990,7 @@ function updatePlayerCards(playerName, market, logs) {
   const slug  = playerSlug(playerName);
   const cards = document.querySelectorAll(`[data-player="${slug}"][data-market="${market}"]`);
   cards.forEach(card => {
+    if (card.classList.contains('player-card')) return; // pula containers
     const lineNum = parseInt(card.getAttribute('data-line'));
     const odd     = parseFloat(card.getAttribute('data-odd'));
     if (isNaN(lineNum) || isNaN(odd)) return;
@@ -920,26 +1007,28 @@ function updatePlayerCards(playerName, market, logs) {
     const hrEl = card.querySelector('.season-hr');
     if (hrEl) hrEl.textContent = `${hr.hits}/${hr.games} (${hr.pct}%)`;
 
-    const evEl = card.querySelector('.ev-val');
     const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
     const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
-    if (evEl) {
-      evEl.textContent = (ev > 0 ? '+' : '') + ev + '%';
-      evEl.className = 'line-stat-val ev-val ' + sigCls;
-    }
 
-    const signalEl = card.querySelector('.ev-signal');
-    if (signalEl) {
-      signalEl.textContent = sigTxt;
-      signalEl.className = 'ev-signal ' + sigCls;
-    }
-
-    card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
-    if (ev > 3) {
-      card.classList.add('ev-plus');
-      if (odd >= oddThreshold) card.classList.add('high-value');
-    } else if (ev < -3) {
-      card.classList.add('ev-minus');
+    // Só atualiza display de EV se estiver no modo temporada
+    if (evMode === 'season') {
+      const evEl = card.querySelector('.ev-val');
+      if (evEl) {
+        evEl.textContent = (ev > 0 ? '+' : '') + ev + '%';
+        evEl.className = 'line-stat-val ev-val ' + sigCls;
+      }
+      const signalEl = card.querySelector('.ev-signal');
+      if (signalEl) {
+        signalEl.textContent = sigTxt;
+        signalEl.className = 'ev-signal ' + sigCls;
+      }
+      card.classList.remove('ev-plus', 'ev-minus', 'ev-plus-dk', 'high-value');
+      if (ev > 3) {
+        card.classList.add('ev-plus');
+        if (odd >= oddThreshold) card.classList.add('high-value');
+      } else if (ev < -3) {
+        card.classList.add('ev-minus');
+      }
     }
 
     const kellyEl = card.querySelector('.kelly-val');
@@ -952,9 +1041,6 @@ function updatePlayerCards(playerName, market, logs) {
     card.setAttribute('data-ev-season', ev);
     card.setAttribute('data-kelly', kelly);
     card.setAttribute('data-hr', hr.hits + '/' + hr.games);
-
-    // Se estiver no modo DK, re-aplica o modo para manter consistência
-    if (evMode === 'dk') applyEVModeToCards();
   });
 }
 
@@ -975,7 +1061,6 @@ function loadFromStorage() {
   } catch(e) { return false; }
 }
 
-// Lê do browser.storage (extensão) e sincroniza com localStorage
 async function syncFromExtension() {
   try {
     if (typeof browser === 'undefined' || !browser.storage) return false;
@@ -983,7 +1068,6 @@ async function syncFromExtension() {
     if (!data.ev_datasets) return false;
     const datasets = JSON.parse(data.ev_datasets);
     if (!Array.isArray(datasets) || datasets.length === 0) return false;
-    // Só atualiza se tiver dados mais novos
     const latestExt = Math.max(...datasets.map(d => new Date(d.scrapedAt || 0).getTime()));
     const latestLocal = allDatasets.length
       ? Math.max(...allDatasets.map(d => new Date(d.scrapedAt || 0).getTime()))
@@ -995,16 +1079,14 @@ async function syncFromExtension() {
   } catch(e) { return false; }
 }
 
-// Polling: verifica a cada 30s se a extensão atualizou os dados
 function startExtensionSync() {
   setInterval(async () => {
     const updated = await syncFromExtension();
     if (updated) {
       console.log('[Sync] Dados atualizados pela extensão — re-renderizando...');
-      refLoaded = false; // reseta cache DK para recalcular
+      refLoaded = false;
       updateChips();
       renderManual();
-      // Mostra notificação discreta
       const el = document.getElementById('nba-status');
       if (el) {
         el.textContent = '🔄 Dados atualizados automaticamente pela extensão';
@@ -1012,24 +1094,27 @@ function startExtensionSync() {
         setTimeout(() => el.style.display = 'none', 3000);
       }
     }
-  }, 30000); // checa a cada 30 segundos
+  }, 30000);
 }
 
-// FIX #3: renderTopEVFromDOM lê o EV correto dependendo do modo atual
+// ─── renderTopEVFromDOM — sem filtro DK_MIN_ODD; usa threshold para high-value ─
 function renderTopEVFromDOM() {
   const isDK = evMode === 'dk';
   const cards = document.querySelectorAll('[data-player][data-ev]');
   const items = [];
 
-  const DK_MIN_ODD = 1.70; // abaixo disso o modelo fica impreciso por distância da âncora
-
   cards.forEach(card => {
+    // Pula containers player-card
+    if (card.classList.contains('player-card')) return;
+    // Pula cards escondidos pelo filtro de mercado
+    const parentCard = card.closest('.player-card');
+    if (parentCard && parentCard.style.display === 'none') return;
+
     const odd = parseFloat(card.getAttribute('data-odd'));
     let ev;
     if (isDK) {
       ev = parseFloat(card.getAttribute('data-ev-pinnacle') || 'NaN');
-      if (isNaN(ev)) return;
-      if (odd < DK_MIN_ODD) return; // corta odds baixas no modo DK
+      if (isNaN(ev)) return; // sem match DK → não entra no ranking
     } else {
       ev = parseFloat(card.getAttribute('data-ev-season') || card.getAttribute('data-ev') || 'NaN');
     }
@@ -1040,7 +1125,7 @@ function renderTopEVFromDOM() {
       market:   card.getAttribute('data-market'),
       mktLabel: card.getAttribute('data-mktlabel'),
       label:    card.getAttribute('data-label'),
-      odd:      parseFloat(card.getAttribute('data-odd')),
+      odd,
       ev,
       kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
       lineNum:  parseInt(card.getAttribute('data-line')),
@@ -1059,17 +1144,22 @@ function renderManual() {
   let allPlayers = [], latestScrapedAt = null;
   for (const ds of allDatasets) {
     const mkt = ds.market || 'desconhecido';
-    for (const p of ds.players) allPlayers.push({ ...p, market: mkt });
+    for (const p of ds.players) allPlayers.push({ ...p, market: mkt, gameName: ds.gameName });
     if (!latestScrapedAt || ds.scrapedAt > latestScrapedAt) latestScrapedAt = ds.scrapedAt;
   }
-  if (activeFilter === 'reb')       allPlayers = allPlayers.filter(p => p.market === 'rebotes');
-  else if (activeFilter === 'pts')  allPlayers = allPlayers.filter(p => p.market === 'pontos');
-  else if (activeFilter === 'ast')  allPlayers = allPlayers.filter(p => p.market === 'assistências');
-  else if (activeFilter === '3pts') allPlayers = allPlayers.filter(p => p.market === '3pts');
-  else if (activeFilter === 'pos')  allPlayers = allPlayers.filter(p => hasEVPlus(p));
+
+  // Filtros de mercado só no modo temporada (no DK, o filtro é aplicado via DOM depois)
+  let allPlayersFiltered = allPlayers;
+  if (evMode !== 'dk') {
+    if (activeFilter === 'reb')       allPlayersFiltered = allPlayers.filter(p => p.market === 'rebotes');
+    else if (activeFilter === 'pts')  allPlayersFiltered = allPlayers.filter(p => p.market === 'pontos');
+    else if (activeFilter === 'ast')  allPlayersFiltered = allPlayers.filter(p => p.market === 'assistências');
+    else if (activeFilter === '3pts') allPlayersFiltered = allPlayers.filter(p => p.market === '3pts');
+    else if (activeFilter === 'pos')  allPlayersFiltered = allPlayers.filter(p => hasEVPlus(p));
+  }
 
   const list = document.getElementById('manual-list'), titleEl = document.getElementById('manual-section-title');
-  if (allPlayers.length === 0) {
+  if (allPlayersFiltered.length === 0) {
     list.innerHTML = '<div class="empty">Nenhum resultado para este filtro.</div>';
     titleEl.style.display = 'none'; document.getElementById('top-ev-box').style.display = 'none'; return;
   }
@@ -1079,11 +1169,10 @@ function renderManual() {
   let totalLines = 0, evPlusCount = 0, bestEV = -Infinity;
   const topEVItems = [];
 
-  const html = allPlayers.map(p => {
+  const html = allPlayersFiltered.map(p => {
     const mkt = p.market || 'desconhecido', mktLabel = MKT_NAMES[mkt] || mkt;
     const linesEntries = Object.entries(p.lines || {});
 
-    // Mercado binário (duplo/triplo duplo) — renderiza diferente
     if (p.binary) {
       const oddSim = p.lines['Sim'];
       const oddNao = p.oddNao;
@@ -1093,6 +1182,7 @@ function renderManual() {
       const ev       = calcEV(probFair, oddSim);
       const kelly    = calcKelly(probFair, oddSim);
       totalLines++;
+      let playerHasEV = false;
       if (ev > 3) { evPlusCount++; playerHasEV = true; topEVItems.push({ player: p.player, market: mkt, mktLabel, label: 'Sim', odd: oddSim, ev, kelly, lineNum: 0, hr: '' }); }
       if (ev > bestEV) bestEV = ev;
       const isHighValue = ev > 3 && oddSim >= oddThreshold;
@@ -1101,7 +1191,7 @@ function renderManual() {
       const sigCls = ev > 3 ? 'pos' : ev < -3 ? 'neg' : 'neu';
       const sigTxt = ev > 3 ? 'EV+' : ev < -3 ? 'EV−' : 'neutro';
       const gameLabel = p.gameName ? '<span style="font-size:10px;color:#444;margin-left:6px">' + p.gameName + '</span>' : '';
-      const cardHTML = '<div class="player-card' + (playerHasEV ? ' has-ev' : '') + '">' +
+      return '<div class="player-card' + (playerHasEV ? ' has-ev' : '') + '" data-market-type="' + mkt + '">' +
         '<div class="player-header">' +
           '<div class="player-name">' + p.player + gameLabel + '</div>' +
           '<div class="player-meta"><span class="market-badge">' + mkt + '</span></div>' +
@@ -1123,7 +1213,6 @@ function renderManual() {
           '</div>' +
         '</div>' +
       '</div>';
-      return cardHTML;
     }
 
     if (linesEntries.length < 2) return '';
@@ -1166,9 +1255,10 @@ function renderManual() {
       </div>`;
     }).join('');
 
-    return `<div class="player-card${playerHasEV ? ' has-ev' : ''}">
+    const gameLabel = p.gameName ? `<span style="font-size:10px;color:#444;margin-left:6px">${p.gameName}</span>` : '';
+    return `<div class="player-card${playerHasEV ? ' has-ev' : ''}" data-market-type="${mkt}">
       <div class="player-header">
-        <div class="player-name">${p.player}</div>
+        <div class="player-name">${p.player}${gameLabel}</div>
         <div class="player-meta">
           <span class="market-badge">${mkt}</span>
           ${lambda !== null ? `<span class="last5" style="color:#555">λ=${lambda.toFixed(2)}</span>` : ''}
@@ -1208,7 +1298,6 @@ function renderTopEV(topList) {
   if (!topList || topList.length === 0) { box.style.display = 'none'; return; }
   box.style.display = 'block';
 
-  // Atualiza o título do ranking conforme o modo
   box.querySelector('.top-ev-title').textContent = isDK
     ? '📌 maiores EV+ vs DraftKings'
     : '🏆 maiores EV+ desta rodada';
@@ -1320,11 +1409,9 @@ function renderLive() {
 
 document.getElementById('live-badge').style.display = 'none';
 
-// Restaura datasets da sessão anterior automaticamente
 (function() {
   const sessaoId = new URLSearchParams(window.location.search).get('s');
   if (!sessaoId) {
-    // Tenta primeiro a extensão, depois localStorage
     syncFromExtension().then(fromExt => {
       if (fromExt || loadFromStorage()) {
         updateChips();
@@ -1332,7 +1419,7 @@ document.getElementById('live-badge').style.display = 'none';
         console.log('[Storage] Restaurados', allDatasets.length, 'datasets');
       }
     });
-    startExtensionSync(); // inicia polling da extensão
+    startExtensionSync();
     return;
   }
   document.getElementById('drop-area').innerHTML = '<p>⏳ Carregando sessão compartilhada...</p>';
