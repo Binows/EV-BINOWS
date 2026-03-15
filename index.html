@@ -208,6 +208,9 @@
   .line-stat-val.pinnacle { color: #4a9eff; font-weight: 600; }
   .ev-signal.dk { background: #1a2a3d; color: #4a9eff; border: 1px solid #4a9eff44; }
 
+  .top-ev-stars { font-size: 11px; min-width: 60px; text-align: center; letter-spacing: 1px; }
+  .quality-filter-btn.active { background: #2a2a3e !important; color: #c8a84b !important; border-color: #c8a84b !important; }
+
   .player-card.hidden-search { display: none; }
 
   /* FIX: card sem match no DK fica esmaecido */
@@ -288,7 +291,24 @@
       <span id="share-expiry" style="font-size:11px;color:#555"></span>
     </div>
     <div class="top-ev" id="top-ev-box">
-      <div class="top-ev-title">🏆 maiores EV+ desta rodada</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div class="top-ev-title" style="margin-bottom:0">🏆 maiores EV+ desta rodada</div>
+        <div style="display:flex;gap:4px;align-items:center">
+          <span style="font-size:10px;color:#555;margin-right:2px">qualidade mín.</span>
+          <button class="quality-filter-btn" data-stars="3" onclick="setQualityFilter(3)"
+            style="font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid #3a3a4e;background:transparent;color:#888;cursor:pointer;transition:all 0.15s">
+            ★★★+
+          </button>
+          <button class="quality-filter-btn" data-stars="4" onclick="setQualityFilter(4)"
+            style="font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid #3a3a4e;background:transparent;color:#888;cursor:pointer;transition:all 0.15s">
+            ★★★★+
+          </button>
+          <button class="quality-filter-btn" data-stars="5" onclick="setQualityFilter(5)"
+            style="font-size:11px;padding:3px 8px;border-radius:12px;border:1px solid #3a3a4e;background:transparent;color:#888;cursor:pointer;transition:all 0.15s">
+            ★★★★★
+          </button>
+        </div>
+      </div>
       <div id="nba-status" style="display:none;font-size:11px;color:#4caf5099;margin-bottom:8px"></div>
       <div class="top-ev-list" id="top-ev-list"></div>
     </div>
@@ -1226,7 +1246,64 @@ function startExtensionSync() {
   }, 30000);
 }
 
-// ─── renderTopEVFromDOM — usa oddThreshold do usuário no modo DK ─────────────
+// ─── Score de qualidade da edge (1-5 estrelas) ───────────────────────────────
+// Combina: confiança estatística (Wilson), tamanho da amostra, volatilidade da odd
+function calcQualityScore(ev, odd, hrStr) {
+  if (!hrStr) return 0;
+  const parts = hrStr.split('/');
+  const hits  = parseInt(parts[0]);
+  const games = parseInt(parts[1]);
+  if (isNaN(hits) || isNaN(games) || games === 0) return 0;
+
+  const p = hits / games;
+
+  // Wilson Score — limite inferior do intervalo de confiança 95%
+  // Penaliza amostras pequenas mesmo com hit rate alto
+  const z  = 1.96;
+  const n  = games;
+  const wilson = (p + z*z/(2*n) - z*Math.sqrt((p*(1-p) + z*z/(4*n))/n)) / (1 + z*z/n);
+  const wilsonLow = Math.max(0, wilson); // prob mínima confiável
+
+  // Fator de amostra: ideal >= 50 jogos
+  const sampleFactor = Math.min(games / 50, 1.0);
+
+  // Fator de volatilidade: odd alta = mais risco de ruína
+  // odd 1.5 → 1.0, odd 3.0 → 0.7, odd 10.0 → 0.4, odd 20+ → 0.2
+  const volatilityFactor = Math.max(0.2, 1 - Math.log(odd) * 0.18);
+
+  // EV normalizado: 5% → baixo, 20% → médio, 50%+ → alto
+  // mas penalizado pela confiança
+  const evFactor = Math.min(ev / 50, 1.0);
+
+  // Score final 0-1
+  const score = (wilsonLow * 0.45) + (sampleFactor * 0.25) + (volatilityFactor * 0.20) + (evFactor * 0.10);
+
+  // Converte para 1-5 estrelas
+  if (score >= 0.55) return 5;
+  if (score >= 0.42) return 4;
+  if (score >= 0.28) return 3;
+  if (score >= 0.15) return 2;
+  return 1;
+}
+
+function starsHTML(n, isDK) {
+  const color = isDK ? '#4a9eff' : '#c8a84b';
+  const empty = '#2a2a3e';
+  return Array.from({ length: 5 }, (_, i) =>
+    `<span style="color:${i < n ? color : empty};font-size:11px;line-height:1">★</span>`
+  ).join('');
+}
+
+// Filtro de qualidade mínima (estrelas)
+let minQualityFilter = 0; // 0 = sem filtro
+
+function setQualityFilter(stars) {
+  minQualityFilter = minQualityFilter === stars ? 0 : stars; // toggle
+  document.querySelectorAll('.quality-filter-btn').forEach(b => {
+    b.classList.toggle('active', parseInt(b.getAttribute('data-stars')) === minQualityFilter);
+  });
+  renderTopEVFromDOM();
+}
 function renderTopEVFromDOM() {
   const isDK = evMode === 'dk';
   const cards = document.querySelectorAll('[data-player][data-ev]');
@@ -1273,12 +1350,24 @@ function renderTopEVFromDOM() {
       kelly:    parseFloat(card.getAttribute('data-kelly') || 0),
       lineNum:  parseInt(card.getAttribute('data-line')),
       hr:       card.getAttribute('data-hr') || '',
-      isDK
+      isDK,
+      quality:  calcQualityScore(ev, odd, card.getAttribute('data-hr') || '')
     });
   });
 
-  items.sort((a, b) => b.ev - a.ev);
-  renderTopEV(items);
+  // Filtra por qualidade mínima se ativo
+  const filtered = minQualityFilter > 0
+    ? items.filter(i => i.quality >= minQualityFilter)
+    : items;
+
+  // Ordena por score de qualidade × EV (não só EV bruto)
+  filtered.sort((a, b) => {
+    const scoreA = a.quality * 20 + a.ev;
+    const scoreB = b.quality * 20 + b.ev;
+    return scoreB - scoreA;
+  });
+
+  renderTopEV(filtered);
 }
 
 function renderManual() {
@@ -1445,15 +1534,24 @@ function renderTopEV(topList) {
     ? '📌 maiores EV+ vs DraftKings'
     : '🏆 maiores EV+ desta rodada';
 
-  list.innerHTML = topList.slice(0, 10).map((item, i) => {
+  list.innerHTML = topList.slice(0, 15).map((item, i) => {
     const isHighValue = item.odd >= oddThreshold;
-    const dkClass = (item.isDK || isDK) ? ' dk-item' : '';
-    return `<div class="top-ev-item${dkClass}${isHighValue ? ' high-value' : ''}" data-odd="${item.odd}">
+    const dkClass     = (item.isDK || isDK) ? ' dk-item' : '';
+    const quality     = item.quality || 0;
+    const stars       = starsHTML(quality, item.isDK || isDK);
+
+    // Cor da borda esquerda por qualidade
+    const qualityColor = quality >= 4 ? '#4caf50' : quality >= 3 ? '#c8a84b' : quality >= 2 ? '#888' : '#444';
+    const qualityBorder = `border-left-color:${qualityColor}`;
+
+    return `<div class="top-ev-item${dkClass}${isHighValue ? ' high-value' : ''}"
+        data-odd="${item.odd}" data-quality="${quality}" style="${qualityBorder}">
       <span class="top-ev-rank">${i + 1}</span>
       <span class="top-ev-player">${item.player}</span>
       <span class="top-ev-line">${item.label} <span style="color:#555;font-size:10px">${item.mktLabel}</span></span>
       <span class="top-ev-odd">@ ${item.odd.toFixed(2)}</span>
       <span class="top-ev-ev">+${item.ev.toFixed(1)}%</span>
+      <span class="top-ev-stars">${stars}</span>
       <span class="top-ev-banca">${item.kelly > 0 ? item.kelly.toFixed(1) + '% banca' : ''}</span>
       <span class="top-ev-last5">${item.hr ? item.hr + ' temp.' : ''}</span>
     </div>`;
