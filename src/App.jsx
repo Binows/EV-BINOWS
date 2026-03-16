@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import LiveBetsPanel from './components/LiveBetsPanel'
 import ManualControls from './components/ManualControls'
 import MetricsPanel from './components/MetricsPanel'
@@ -206,7 +206,6 @@ export default function App() {
         if (line.isPositive) topEV.push(line)
       }
     }
-    console.log('topEV mercados:', topEV.map(l => l.market))
     return topEV.sort((a, b) => b.ev - a.ev)
   }, [enrichedAllPlayers])
 
