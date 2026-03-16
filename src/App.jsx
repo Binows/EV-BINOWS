@@ -187,21 +187,28 @@ export default function App() {
     [datasets, filter, oddThreshold, playerSearch],
   )
 
-  // Second-pass enrichment with season logs
+  // Second-pass enrichment with season logs (filtrado — para PlayerCards)
   const enrichedPlayers = useMemo(
     () => enrichPlayersWithSeasonStats(manualView.players, seasonLogs),
     [manualView.players, seasonLogs],
   )
 
+  // Enriquecimento completo sem filtro — para Top EV mostrar todos os mercados
+  const enrichedAllPlayers = useMemo(
+    () => enrichPlayersWithSeasonStats(manualView.topEV_source, seasonLogs),
+    [manualView.topEV_source, seasonLogs],
+  )
+
   const enrichedTopEV = useMemo(() => {
     const topEV = []
-    for (const player of enrichedPlayers) {
+    for (const player of enrichedAllPlayers) {
       for (const line of player.lines) {
         if (line.isPositive) topEV.push(line)
       }
     }
+    console.log('topEV mercados:', topEV.map(l => l.market))
     return topEV.sort((a, b) => b.ev - a.ev)
-  }, [enrichedPlayers])
+  }, [enrichedAllPlayers])
 
   // --- Live view model ---
   const liveFiltered = useMemo(() => {

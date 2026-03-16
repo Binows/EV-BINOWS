@@ -1,20 +1,5 @@
 /**
  * dataTransforms.js
- *
- * Transforms raw JSON datasets (exported by the browser extension) into
- * structured player/line objects ready for the React UI.
- *
- * Pipeline:
- *   1. normalizeDatasetFromFile — parses a raw JSON blob into one or more
- *      normalised dataset objects (handles both numeric and binary markets).
- *   2. parseJsonFiles — reads FileList from the file-picker and accumulates
- *      datasets, deduplicating by _id.
- *   3. buildManualView — computes EV/Kelly for every line, applies filters,
- *      and returns the full view-model consumed by App.jsx.
- *   4. enrichPlayersWithSeasonStats — second-pass enrichment that refines EV
- *      and Kelly using actual season game logs fetched from NBA stats API.
- *   5. getUniquePlayerMarkets — utility to extract the unique player+market
- *      pairs needed to drive the season-stats fetch loop.
  */
 
 import {
@@ -46,13 +31,6 @@ const MARKET_FILTER_MAP = {
   '3pts': '3pts',
 }
 
-/**
- * Creates a URL-safe slug from a player's full name.
- * Used as a stable identifier when matching lines to season-stats updates.
- *
- * @param {string} name - Player display name
- * @returns {string} e.g. "lebron-james"
- */
 export function playerSlug(name) {
   return name.toLowerCase().replace(/[^a-z0-9]/g, '-')
 }
@@ -61,13 +39,6 @@ function removeDiacritics(text) {
   return text.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
 }
 
-/**
- * Normalises a market name string: lowercases, strips diacritics.
- * The special case 'assistencias' is preserved (not aliased).
- *
- * @param {string} name - Raw market key from the JSON export
- * @returns {string} Normalised market key
- */
 export function normalizeMarketName(name = '') {
   const plain = removeDiacritics(String(name).toLowerCase().trim())
   if (plain === 'assistencias') return 'assistencias'
@@ -178,15 +149,6 @@ function readFileAsText(file) {
   })
 }
 
-/**
- * Reads multiple JSON files from a FileList, parses them into normalised
- * datasets, and merges them into `currentDatasets` without duplicates.
- * Files that fail to parse are silently ignored.
- *
- * @param {FileList|File[]} files           - Files selected by the user
- * @param {Array}           currentDatasets - Existing datasets in state
- * @returns {Promise<Array>} Merged array of all datasets
- */
 export async function parseJsonFiles(files, currentDatasets) {
   if (!files || files.length === 0) return currentDatasets
 
@@ -319,20 +281,6 @@ function filterPlayers(players, filterValue) {
   return players.filter((item) => item.market === market)
 }
 
-/**
- * Builds the complete view-model for the Manual mode.
- *
- * Processes all loaded datasets into per-player card data with computed
- * EV, Kelly, and signal flags. Applies market filter, player search, and
- * computes aggregate metrics for the dashboard header.
- *
- * @param {Array}  datasets              - Array of normalised dataset objects
- * @param {object} opts
- * @param {string} opts.filter           - Active filter: 'todos'|'pos'|'pts'|'reb'|'ast'|'3pts'
- * @param {number} opts.oddThreshold     - Minimum odd for 'high-value' highlight
- * @param {string} opts.playerSearch     - Player name search string
- * @returns {{ players: Array, topEV: Array, metrics: object }}
- */
 export function buildManualView(datasets, { filter, oddThreshold, playerSearch }) {
   const safeSearch = playerSearch.trim().toLowerCase()
   const allPlayers = []
@@ -387,7 +335,8 @@ export function buildManualView(datasets, { filter, oddThreshold, playerSearch }
 
   return {
     players: bySearch,
-    topEV,
+    topEV: topEV,
+    topEV_source: mapped,
     metrics: {
       ...metrics,
       bestEVText: metrics.bestEV > 0 ? `+${metrics.bestEV.toFixed(1)}%` : '—',
@@ -415,14 +364,6 @@ export function datasetsToChipData(datasets) {
   })
 }
 
-
-/**
- * Returns the unique player+market combinations present across all datasets.
- * Used by App.jsx to drive the async NBA season-stats prefetch loop.
- *
- * @param {Array} datasets - Normalised datasets
- * @returns {Array<{player:string, market:string}>} Deduplicated list
- */
 export function getUniquePlayerMarkets(datasets) {
   const seen = new Set()
   const result = []
@@ -439,25 +380,8 @@ export function getUniquePlayerMarkets(datasets) {
   return result
 }
 
-/**
- * Second-pass enrichment that refines Kelly recommendations using real
- * season game-log data fetched from the NBA stats API.
- *
- * For each player line that has season logs available the function:
- *   - Calculates the empirical hit-rate for the exact line number.
- *   - Re-computes Kelly using calcKellyFromSeason (a conservative
- *     season-confidence-tiered fraction of Half-Kelly).
- *   - Attaches seasonHR and hrStr for display in PlayerCards.
- *   - Attaches qualityScore using calcQualityScore.
- *
- * Lines that have fewer than 5 season games, or for which no logs were
- * found, are returned unmodified.
- *
- * @param {Array}  players     - players array from buildManualView
- * @param {object} seasonLogs  - Map keyed "${player}|${market}" -> Array<{pts,reb,ast,fg3}>
- * @returns {Array} Enriched players array (new references, original not mutated)
- */
 export function enrichPlayersWithSeasonStats(players, seasonLogs) {
+  if (!players || !Array.isArray(players)) return []
   if (!seasonLogs || Object.keys(seasonLogs).length === 0) return players
 
   return players.map((player) => ({
@@ -469,7 +393,8 @@ export function enrichPlayersWithSeasonStats(players, seasonLogs) {
       const hr = calcSeasonHitRate(logs, line.market, line.lineNumber)
       if (!hr || hr.games < 5) return line
 
-      const hrStr = `${hr.hits}/${hr.games} (${(hr.pct * 100).toFixed(0)}%)`
+      // hr.pct vem como inteiro 0-100 de calcSeasonHitRate
+      const hrStr = `${hr.hits}/${hr.games} (${hr.pct}%)`
       const refinedKelly =
         hr.games >= 10
           ? calcKellyFromSeason(hr.pct, line.odd, hr)
