@@ -269,7 +269,7 @@ function evaluateBinaryPlayer(player, market, oddThreshold) {
 }
 
 function playerHasEVPlus(player) {
-  return player.lines.some((line) => line.isPositive)
+  return player.lines.some((line) => line.ev > 3)
 }
 
 function filterPlayers(players, filterValue) {
@@ -324,7 +324,7 @@ export function buildManualView(datasets, { filter, oddThreshold, playerSearch }
     for (const line of player.lines) {
       metrics.cntTotal += 1
       if (line.ev > metrics.bestEV) metrics.bestEV = line.ev
-      if (line.isPositive) {
+      if (line.ev > 3) {
         metrics.cntPos += 1
         topEV.push(line)
       }
@@ -380,6 +380,13 @@ export function getUniquePlayerMarkets(datasets) {
   return result
 }
 
+/**
+ * Second-pass enrichment usando hit rate da temporada como prob real.
+ * 
+ * Com >= 10 jogos de temporada: usa hr.pct como prob principal para
+ * recalcular EV e Kelly — mais preciso que o Poisson para odds altas.
+ * Com < 10 jogos: mantém os valores do Poisson como fallback.
+ */
 export function enrichPlayersWithSeasonStats(players, seasonLogs) {
   if (!players || !Array.isArray(players)) return []
   if (!seasonLogs || Object.keys(seasonLogs).length === 0) return players
@@ -393,15 +400,38 @@ export function enrichPlayersWithSeasonStats(players, seasonLogs) {
       const hr = calcSeasonHitRate(logs, line.market, line.lineNumber)
       if (!hr || hr.games < 5) return line
 
-      // hr.pct vem como inteiro 0-100 de calcSeasonHitRate
       const hrStr = `${hr.hits}/${hr.games} (${hr.pct}%)`
-      const refinedKelly =
-        hr.games >= 10
-          ? calcKellyFromSeason(hr.pct, line.odd, hr)
-          : line.kelly
       const qualityScore = calcQualityScore(line.ev, line.odd, hrStr)
 
-      return { ...line, seasonHR: hr, hrStr, kelly: refinedKelly, qualityScore }
+      // Com >= 10 jogos: usa prob da temporada como referência principal
+      if (hr.games >= 10) {
+        const seasonProb = hr.pct / 100
+        const seasonEV = calcEV(seasonProb, line.odd)
+        const seasonKelly = calcKellyFromSeason(seasonProb, line.odd, hr)
+
+        return {
+          ...line,
+          prob: seasonProb,
+          ev: seasonEV,
+          kelly: seasonKelly,
+          hrStr,
+          seasonHR: hr,
+          qualityScore,
+          isPositive: seasonEV > 3,
+          isNegative: seasonEV < -3,
+          isHighValue: seasonEV > 3 && line.odd >= 2,
+        }
+      }
+
+      // Com 5-9 jogos: mantém EV do Poisson, só refina Kelly
+      const refinedKelly = calcKellyFromSeason(line.prob, line.odd, hr)
+      return {
+        ...line,
+        kelly: refinedKelly,
+        hrStr,
+        seasonHR: hr,
+        qualityScore,
+      }
     }),
   }))
 }

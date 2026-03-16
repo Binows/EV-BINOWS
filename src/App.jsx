@@ -199,11 +199,13 @@ export default function App() {
     [manualView.topEV_source, seasonLogs],
   )
 
+  // Top EV usa ev > 3 diretamente — não depende do isPositive calculado pelo Poisson
+  // Isso garante que linhas com odds altas que as stats confirmam como boas apareçam aqui
   const enrichedTopEV = useMemo(() => {
     const topEV = []
     for (const player of enrichedAllPlayers) {
       for (const line of player.lines) {
-        if (line.isPositive) topEV.push(line)
+        if (line.ev > 3) topEV.push(line)
       }
     }
     return topEV.sort((a, b) => b.ev - a.ev)

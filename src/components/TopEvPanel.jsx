@@ -1,4 +1,4 @@
-﻿import { calcQualityScore } from '../functions/evMath'
+import { calcQualityScore } from '../functions/evMath'
 
 /**
  * Renders a 1-5 star rating as filled/empty star glyphs.
@@ -14,13 +14,14 @@ function Stars({ score }) {
 }
 
 export default function TopEvPanel({ items }) {
-  if (!items.length) return null
+  const filtered = items.filter((item) => item.odd >= 2.0)
+  if (!filtered.length) return null
 
   return (
     <section className="top-ev">
       <div className="top-ev-title">Maiores EV+ da rodada</div>
       <div className="top-ev-list">
-        {items.slice(0, 15).map((item, index) => {
+        {filtered.slice(0, 20).map((item, index) => {
           const quality = item.qualityScore ?? calcQualityScore(item.ev, item.odd, item.hrStr || '')
           return (
             <div
@@ -35,6 +36,9 @@ export default function TopEvPanel({ items }) {
               <span className="top-ev-odd">@ {item.odd.toFixed(2)}</span>
               <span className="top-ev-ev">+{item.ev.toFixed(1)}%</span>
               <Stars score={quality} />
+              {item.hrStr && (
+                <span className="top-ev-hr">{item.hrStr}</span>
+              )}
               <span className="top-ev-banca">
                 {item.kelly > 0 ? `${item.kelly.toFixed(1)}% banca` : ''}
               </span>
