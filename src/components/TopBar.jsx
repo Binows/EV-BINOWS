@@ -16,6 +16,7 @@ export default function TopBar({
   onThresholdChange,
   search,
   onSearchChange,
+  onRefreshLive,
 }) {
   return (
     <header className="topbar">
@@ -24,7 +25,6 @@ export default function TopBar({
         EV-BINOWS
         {mode === 'live' ? <span className="live-badge">AO VIVO</span> : null}
       </div>
-
       <div className="mode-tabs">
         <button
           type="button"
@@ -40,8 +40,16 @@ export default function TopBar({
         >
           Live
         </button>
+        {mode === 'live' && onRefreshLive && (
+          <button
+            type="button"
+            className="mode-tab refresh-topbar"
+            onClick={onRefreshLive}
+          >
+            ↻ Atualizar
+          </button>
+        )}
       </div>
-
       <div className="filters">
         {FILTERS.map((item) => (
           <button
@@ -53,7 +61,6 @@ export default function TopBar({
             {item.label}
           </button>
         ))}
-
         <div className="threshold-control">
           <span className="threshold-label">odd min. {threshold.toFixed(2)}</span>
           <input
@@ -66,7 +73,6 @@ export default function TopBar({
             onChange={(e) => onThresholdChange(e.target.value)}
           />
         </div>
-
         <div className="search-control">
           <span className="search-icon">Search</span>
           <input

@@ -61,7 +61,7 @@ export default function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(datasets))
   }, [datasets])
 
-  // --- Optional extension sync (legacy parity): poll browser.storage every 30s ---
+  // --- Optional extension sync: poll browser.storage every 30s ---
   useEffect(() => {
     let isMounted = true
 
@@ -91,7 +91,7 @@ export default function App() {
           if (isMounted) setShareStatus('')
         }, 3000)
       } catch {
-        // Silent fail: extension API may not be available in normal browsers.
+        // Silent fail
       }
     }
 
@@ -115,7 +115,6 @@ export default function App() {
       .then((saved) => {
         setDatasets(saved)
         setShareStatus('')
-        // Remove the param without causing a reload
         const url = new URL(window.location.href)
         url.searchParams.delete('s')
         window.history.replaceState({}, '', url.toString())
@@ -125,7 +124,14 @@ export default function App() {
       })
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // --- NBA season stats enrichment (fires whenever datasets change) ---
+  // --- Auto-load live data ao entrar no modo Live ---
+  useEffect(() => {
+    if (mode === 'live' && liveBets.length === 0 && !loadingLive) {
+      loadLiveData()
+    }
+  }, [mode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // --- NBA season stats enrichment ---
   useEffect(() => {
     if (!datasets.length) {
       setSeasonLogs({})
@@ -176,31 +182,25 @@ export default function App() {
     }
 
     run()
-    return () => {
-      cancelled = true
-    }
+    return () => { cancelled = true }
   }, [datasets])
 
-  // --- Manual view model (memoised) ---
+  // --- Manual view model ---
   const manualView = useMemo(
     () => buildManualView(datasets, { filter, oddThreshold, playerSearch }),
     [datasets, filter, oddThreshold, playerSearch],
   )
 
-  // Second-pass enrichment with season logs (filtrado — para PlayerCards)
   const enrichedPlayers = useMemo(
     () => enrichPlayersWithSeasonStats(manualView.players, seasonLogs),
     [manualView.players, seasonLogs],
   )
 
-  // Enriquecimento completo sem filtro — para Top EV mostrar todos os mercados
   const enrichedAllPlayers = useMemo(
     () => enrichPlayersWithSeasonStats(manualView.topEV_source, seasonLogs),
     [manualView.topEV_source, seasonLogs],
   )
 
-  // Top EV usa ev > 3 diretamente — não depende do isPositive calculado pelo Poisson
-  // Isso garante que linhas com odds altas que as stats confirmam como boas apareçam aqui
   const enrichedTopEV = useMemo(() => {
     const topEV = []
     for (const player of enrichedAllPlayers) {
@@ -214,19 +214,22 @@ export default function App() {
   // --- Live view model ---
   const liveFiltered = useMemo(() => {
     let data = [...liveBets]
-    if (filter === 'pos') data = data.filter((item) => item.ev > 2)
+    if (filter === 'pos') data = data.filter((item) => item.ev > 3)
     if (filter === 'pts') data = data.filter((item) => item.type === 'pts')
     if (filter === 'reb') data = data.filter((item) => item.type === 'reb')
     if (filter === 'ast') data = data.filter((item) => item.type === 'ast')
+    // FIX: TopBar envia '3pts' mas MARKET_TYPE retorna '3pt' — normaliza os dois
+    if (filter === '3pts' || filter === '3pt') data = data.filter((item) => item.type === '3pt')
+    data = data.filter((item) => item.odd >= oddThreshold)
     if (playerSearch.trim()) {
       const q = playerSearch.toLowerCase().trim()
       data = data.filter((item) => item.player.toLowerCase().includes(q))
     }
     return data
-  }, [filter, liveBets, playerSearch])
+  }, [filter, liveBets, playerSearch, oddThreshold])
 
   const liveMetrics = useMemo(() => {
-    const positives = liveBets.filter((bet) => bet.ev > 2)
+    const positives = liveBets.filter((bet) => bet.ev > 3)
     const best = positives.length ? Math.max(...positives.map((bet) => bet.ev)) : null
     return {
       cntPos: positives.length,
@@ -317,6 +320,7 @@ export default function App() {
         onThresholdChange={handleThresholdChange}
         search={playerSearch}
         onSearchChange={setPlayerSearch}
+        onRefreshLive={mode === 'live' ? loadLiveData : undefined}
       />
 
       <main className="container">
@@ -332,27 +336,21 @@ export default function App() {
               onShare={handleShare}
             />
             <ShareBox url={shareUrl} status={shareStatus} onCopy={handleCopyLink} />
-            {statsStatus && (
-              <div className="stats-status">{statsStatus}</div>
-            )}
+            {statsStatus && <div className="stats-status">{statsStatus}</div>}
             <TopEvPanel items={enrichedTopEV} />
             <div className="section-title">player props</div>
             <PlayerCards players={enrichedPlayers} />
           </>
         ) : (
           <>
-            <div className="section-title">player props de hoje - NBA</div>
             <LiveBetsPanel bets={liveFiltered} loadingText={loadingLive} />
             <div className="footer">
               <span className="footer-txt">
-                The Odds API - Pinnacle + DraftKings + FanDuel - by Binows
+                bet365 via odds-api.io + NBA Stats - by Binows
               </span>
-              <span className="req-info">
-                {remainingRequests ? `${remainingRequests} req restantes` : ''}
-              </span>
-              <button type="button" className="refresh-btn" onClick={loadLiveData}>
-                Atualizar
-              </button>
+              {remainingRequests ? (
+                <span className="req-info">{remainingRequests} req restantes</span>
+              ) : null}
             </div>
           </>
         )}
