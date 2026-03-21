@@ -6,6 +6,7 @@ import PlayerCards from './components/PlayerCards'
 import ShareBox from './components/ShareBox'
 import TopBar from './components/TopBar'
 import TopEvPanel from './components/TopEvPanel'
+import { NBA_TEAMS } from './components/TeamFilter'
 import {
   buildManualView,
   datasetsToChipData,
@@ -24,12 +25,39 @@ function getDefaultMetrics() {
   return { cntPos: 0, cntTotal: 0, bestEVText: '—', lastUpdate: '—' }
 }
 
+// Extrai lista de nomes de times únicos a partir das apostas
+function extractTeamNames(bets) {
+  const names = new Set()
+  for (const bet of bets) {
+    if (!bet.game) continue
+    // game = "Away @ Home"
+    const parts = bet.game.split(' @ ')
+    if (parts[0]) names.add(parts[0].trim())
+    if (parts[1]) names.add(parts[1].trim())
+  }
+  return Array.from(names)
+}
+
+// Verifica se uma aposta pertence a algum dos times selecionados
+function betMatchesTeams(bet, activeTeams) {
+  if (!activeTeams.length) return true
+  return activeTeams.some((abbr) => {
+    const team = NBA_TEAMS.find((t) => t.abbr === abbr)
+    if (!team) return false
+    const gameLower = bet.game.toLowerCase()
+    const teamWords = team.name.toLowerCase().split(' ')
+    const lastName = teamWords[teamWords.length - 1]
+    return gameLower.includes(lastName)
+  })
+}
+
 export default function App() {
   // --- UI state ---
   const [mode, setMode] = useState('manual')
   const [filter, setFilter] = useState('todos')
   const [oddThreshold, setOddThreshold] = useState(2)
   const [playerSearch, setPlayerSearch] = useState('')
+  const [activeTeams, setActiveTeams] = useState([])  // filtro de times
 
   // --- Data state ---
   const [datasets, setDatasets] = useState([])
@@ -45,71 +73,51 @@ export default function App() {
   const [shareUrl, setShareUrl] = useState('')
   const [shareStatus, setShareStatus] = useState('')
 
-  // --- Persist/restore datasets from localStorage ---
+  // --- Persist/restore datasets ---
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
       if (!raw) return
       const parsed = JSON.parse(raw)
       if (Array.isArray(parsed) && parsed.length) setDatasets(parsed)
-    } catch {
-      // Ignore corrupted local storage.
-    }
+    } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(datasets))
   }, [datasets])
 
-  // --- Optional extension sync: poll browser.storage every 30s ---
+  // --- Extension sync ---
   useEffect(() => {
     let isMounted = true
-
     async function syncFromExtension() {
       try {
         if (typeof globalThis.browser === 'undefined') return
         if (!globalThis.browser?.storage?.local?.get) return
-
         const data = await globalThis.browser.storage.local.get('ev_datasets')
         if (!data?.ev_datasets) return
-
         const parsed = JSON.parse(data.ev_datasets)
         if (!Array.isArray(parsed) || parsed.length === 0) return
-
-        const latestExt = Math.max(
-          ...parsed.map((d) => new Date(d.scrapedAt || 0).getTime()),
-        )
+        const latestExt = Math.max(...parsed.map((d) => new Date(d.scrapedAt || 0).getTime()))
         const latestLocal = datasets.length
           ? Math.max(...datasets.map((d) => new Date(d.scrapedAt || 0).getTime()))
           : 0
-
         if (latestExt <= latestLocal || !isMounted) return
-
         setDatasets(parsed)
         setShareStatus('Dados atualizados automaticamente pela extensao.')
-        setTimeout(() => {
-          if (isMounted) setShareStatus('')
-        }, 3000)
-      } catch {
-        // Silent fail
-      }
+        setTimeout(() => { if (isMounted) setShareStatus('') }, 3000)
+      } catch { /* silent */ }
     }
-
     syncFromExtension()
     const timer = setInterval(syncFromExtension, 30000)
-
-    return () => {
-      isMounted = false
-      clearInterval(timer)
-    }
+    return () => { isMounted = false; clearInterval(timer) }
   }, [datasets])
 
-  // --- Load shared session from URL ?s= param ---
+  // --- Load shared session ---
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const sessionId = params.get('s')
     if (!sessionId) return
-
     setShareStatus('Carregando sessao compartilhada...')
     loadSession(sessionId)
       .then((saved) => {
@@ -119,12 +127,10 @@ export default function App() {
         url.searchParams.delete('s')
         window.history.replaceState({}, '', url.toString())
       })
-      .catch((err) => {
-        setShareStatus(`Erro ao carregar sessao: ${err.message}`)
-      })
+      .catch((err) => setShareStatus(`Erro ao carregar sessao: ${err.message}`))
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // --- Auto-load live data ao entrar no modo Live ---
+  // --- Auto-load live ---
   useEffect(() => {
     if (mode === 'live' && liveBets.length === 0 && !loadingLive) {
       loadLiveData()
@@ -138,19 +144,14 @@ export default function App() {
       setStatsStatus('')
       return
     }
-
     let cancelled = false
-
     async function run() {
       const pairs = getUniquePlayerMarkets(datasets)
       if (!pairs.length) return
-
       setStatsStatus(`Buscando stats: 0/${pairs.length}`)
-
       for (let i = 0; i < pairs.length; i += STATS_BATCH) {
         if (cancelled) return
         const batch = pairs.slice(i, i + STATS_BATCH)
-
         const results = await Promise.all(
           batch.map(async ({ player, market }) => {
             try {
@@ -161,7 +162,6 @@ export default function App() {
             }
           }),
         )
-
         if (!cancelled) {
           setSeasonLogs((prev) => {
             const next = { ...prev }
@@ -172,20 +172,15 @@ export default function App() {
           })
           setStatsStatus(`Buscando stats: ${Math.min(i + STATS_BATCH, pairs.length)}/${pairs.length}`)
         }
-
-        if (i + STATS_BATCH < pairs.length) {
-          await new Promise((r) => setTimeout(r, 250))
-        }
+        if (i + STATS_BATCH < pairs.length) await new Promise((r) => setTimeout(r, 250))
       }
-
       if (!cancelled) setStatsStatus('')
     }
-
     run()
     return () => { cancelled = true }
   }, [datasets])
 
-  // --- Manual view model ---
+  // --- Manual view ---
   const manualView = useMemo(
     () => buildManualView(datasets, { filter, oddThreshold, playerSearch }),
     [datasets, filter, oddThreshold, playerSearch],
@@ -211,22 +206,38 @@ export default function App() {
     return topEV.sort((a, b) => b.ev - a.ev)
   }, [enrichedAllPlayers])
 
-  // --- Live view model ---
+  // --- Live view ---
+  const availableTeams = useMemo(() => extractTeamNames(liveBets), [liveBets])
+
   const liveFiltered = useMemo(() => {
     let data = [...liveBets]
+
+    // Filtro de mercado
     if (filter === 'pos') data = data.filter((item) => item.ev > 3)
     if (filter === 'pts') data = data.filter((item) => item.type === 'pts')
     if (filter === 'reb') data = data.filter((item) => item.type === 'reb')
     if (filter === 'ast') data = data.filter((item) => item.type === 'ast')
-    // FIX: TopBar envia '3pts' mas MARKET_TYPE retorna '3pt' — normaliza os dois
     if (filter === '3pts' || filter === '3pt') data = data.filter((item) => item.type === '3pt')
+
+    // Filtro de odd mínima
     data = data.filter((item) => item.odd >= oddThreshold)
+
+    // Filtro de times (seleção múltipla)
+    if (activeTeams.length > 0) {
+      data = data.filter((item) => betMatchesTeams(item, activeTeams))
+    }
+
+    // Busca por jogador ou time
     if (playerSearch.trim()) {
       const q = playerSearch.toLowerCase().trim()
-      data = data.filter((item) => item.player.toLowerCase().includes(q))
+      data = data.filter((item) =>
+        item.player.toLowerCase().includes(q) ||
+        item.game.toLowerCase().includes(q)
+      )
     }
+
     return data
-  }, [filter, liveBets, playerSearch, oddThreshold])
+  }, [filter, liveBets, playerSearch, oddThreshold, activeTeams])
 
   const liveMetrics = useMemo(() => {
     const positives = liveBets.filter((bet) => bet.ev > 3)
@@ -284,6 +295,17 @@ export default function App() {
     setLoadingLive('')
   }
 
+  // Toggle time: null = limpar tudo, abbr = toggle individual
+  const handleToggleTeam = (abbr, _name) => {
+    if (abbr === null) {
+      setActiveTeams([])
+      return
+    }
+    setActiveTeams((prev) =>
+      prev.includes(abbr) ? prev.filter((a) => a !== abbr) : [...prev, abbr]
+    )
+  }
+
   const handleShare = async () => {
     if (!datasets.length) return
     setShareStatus('Salvando...')
@@ -321,6 +343,9 @@ export default function App() {
         search={playerSearch}
         onSearchChange={setPlayerSearch}
         onRefreshLive={mode === 'live' ? loadLiveData : undefined}
+        activeTeams={activeTeams}
+        onToggleTeam={handleToggleTeam}
+        availableTeams={availableTeams}
       />
 
       <main className="container">

@@ -9,19 +9,14 @@ const SPORT   = 'basketball_nba'
 const MARKETS = 'player_points,player_rebounds,player_assists'
 const BOOKS   = 'pinnacle,draftkings,fanduel'
 
-// ---------------------------------------------------------------------------
-// Cache em memória — evita rebater a API a cada clique em Atualizar
-// TTL: 15 minutos para eventos, 10 minutos para odds por evento
-// ---------------------------------------------------------------------------
-
-const CACHE_TTL_EVENTS = 15 * 60 * 1000  // 15 min
-const CACHE_TTL_ODDS   = 10 * 60 * 1000  // 10 min
+const CACHE_TTL_EVENTS = 15 * 60 * 1000
+const CACHE_TTL_ODDS   = 10 * 60 * 1000
 
 const cache = {
-  nbaEvents:    { data: null, ts: 0 },
-  b365Events:   { data: null, ts: 0 },
-  b365Odds:     {},  // eventId → { data, ts }
-  eventOdds:    {},  // eventId → { data, ts }
+  nbaEvents:  { data: null, ts: 0 },
+  b365Events: { data: null, ts: 0 },
+  b365Odds:   {},
+  eventOdds:  {},
 }
 
 function isFresh(ts, ttl) {
@@ -33,7 +28,7 @@ function isFresh(ts, ttl) {
 // ---------------------------------------------------------------------------
 
 export async function fetchNBAEvents() {
-  if (isFresh(cache.nbaEvents.ts, CACHE_TTL_EVENTS)) {
+  if (isFresh(cache.nbaEvents.ts, CACHE_TTL_EVENTS) && cache.nbaEvents.data?.length) {
     return cache.nbaEvents.data
   }
   const res = await fetch(`${BASE}/sports/${SPORT}/events`)
@@ -41,8 +36,8 @@ export async function fetchNBAEvents() {
   const events = await res.json()
   if (!Array.isArray(events)) return []
   const now = new Date()
-  const filtered = events.filter((e) => new Date(e.commence_time) > now).slice(0, 4)
-  cache.nbaEvents = { data: filtered, ts: Date.now() }
+  const filtered = events.filter((e) => new Date(e.commence_time) > now).slice(0, 8)
+  if (filtered.length) cache.nbaEvents = { data: filtered, ts: Date.now() }
   return filtered
 }
 
@@ -105,7 +100,7 @@ const MILESTONE_MARKETS = new Set([
 ])
 
 async function fetchBet365NBAEvents() {
-  if (isFresh(cache.b365Events.ts, CACHE_TTL_EVENTS)) {
+  if (isFresh(cache.b365Events.ts, CACHE_TTL_EVENTS) && cache.b365Events.data?.length) {
     return cache.b365Events.data
   }
   const url = `${B365}/events?sport=basketball&league=usa-nba&status=pending&limit=8`
@@ -114,7 +109,7 @@ async function fetchBet365NBAEvents() {
     if (!res.ok) return []
     const data = await res.json()
     const events = Array.isArray(data) ? data : []
-    cache.b365Events = { data: events, ts: Date.now() }
+    if (events.length) cache.b365Events = { data: events, ts: Date.now() }
     return events
   } catch {
     return []
@@ -122,7 +117,7 @@ async function fetchBet365NBAEvents() {
 }
 
 async function fetchBet365Odds(eventId) {
-  if (isFresh(cache.b365Odds[eventId]?.ts, CACHE_TTL_ODDS)) {
+  if (isFresh(cache.b365Odds[eventId]?.ts, CACHE_TTL_ODDS) && cache.b365Odds[eventId]?.data) {
     return cache.b365Odds[eventId].data
   }
   const url = `${B365}/odds?eventId=${eventId}&bookmakers=Bet365`
@@ -130,7 +125,7 @@ async function fetchBet365Odds(eventId) {
     const res = await fetch(url)
     if (!res.ok) return null
     const data = await res.json()
-    cache.b365Odds[eventId] = { data, ts: Date.now() }
+    if (data) cache.b365Odds[eventId] = { data, ts: Date.now() }
     return data
   } catch {
     return null
@@ -142,22 +137,59 @@ function normalizeOU(market, key) {
   for (const prop of market.odds || []) {
     if (!prop.label || prop.hdp == null) continue
     const playerName = prop.label.replace(/\s*\(\d+\)\s*\([\d.]+\)\s*$/, '').trim()
-    if (prop.over) outcomes.push({ description: playerName, name: 'Over',  point: prop.hdp, price: parseFloat(prop.over) })
+    if (prop.over)  outcomes.push({ description: playerName, name: 'Over',  point: prop.hdp, price: parseFloat(prop.over) })
     if (prop.under) outcomes.push({ description: playerName, name: 'Under', point: prop.hdp, price: parseFloat(prop.under) })
   }
   return outcomes.length ? { key, outcomes } : null
 }
 
+/**
+ * Normaliza mercados binários DD/TD da bet365.
+ *
+ * Formato real observado:
+ * {"label":"Jalen Duren (Yes) (1)","under":"1.34"}
+ * {"label":"Jalen Duren (No) (1)","over":"5.00"}
+ *
+ * - label com "(Yes)" → é o Over (Sim)
+ * - label com "(No)"  → é o Under (Não)
+ * - o campo da odd é invertido: Yes usa "under", No usa "over"
+ */
 function normalizeBinary(market, key) {
-  const outcomes = []
+  const playerOdds = {}
+
   for (const prop of market.odds || []) {
     if (!prop.label) continue
-    const playerName = prop.label.replace(/\s*\(\d+\)\s*$/, '').trim()
-    const yesOdd = prop.yes || prop.over
-    const noOdd  = prop.no  || prop.under
-    if (yesOdd) outcomes.push({ description: playerName, name: 'Over',  point: 0, price: parseFloat(yesOdd) })
-    if (noOdd)  outcomes.push({ description: playerName, name: 'Under', point: 0, price: parseFloat(noOdd) })
+
+    // Extrai nome limpo e tipo (Yes/No)
+    const isYes = prop.label.includes('(Yes)')
+    const isNo  = prop.label.includes('(No)')
+    if (!isYes && !isNo) continue
+
+    // Remove sufixos: "(Yes) (1)", "(No) (1)", etc.
+    const playerName = prop.label
+      .replace(/\s*\((Yes|No)\)\s*/gi, '')
+      .replace(/\s*\(\d+\)\s*$/, '')
+      .trim()
+
+    if (!playerOdds[playerName]) playerOdds[playerName] = {}
+
+    if (isYes) {
+      // Yes usa campo "under" na API (invertido)
+      const odd = prop.under || prop.over || prop.odds
+      if (odd) playerOdds[playerName].yes = parseFloat(odd)
+    } else {
+      // No usa campo "over" na API (invertido)
+      const odd = prop.over || prop.under || prop.odds
+      if (odd) playerOdds[playerName].no = parseFloat(odd)
+    }
   }
+
+  const outcomes = []
+  for (const [playerName, odds] of Object.entries(playerOdds)) {
+    if (odds.yes) outcomes.push({ description: playerName, name: 'Over',  point: 0.5, price: odds.yes })
+    if (odds.no)  outcomes.push({ description: playerName, name: 'Under', point: 0.5, price: odds.no })
+  }
+
   return outcomes.length ? { key, outcomes } : null
 }
 
@@ -182,7 +214,7 @@ function normalizeBet365(raw, homeTeam, awayTeam) {
     const key = B365_MARKET_MAP[market.name]
     if (!key) continue
     let normalized = null
-    if (OU_MARKETS.has(key))        normalized = normalizeOU(market, key)
+    if (OU_MARKETS.has(key))             normalized = normalizeOU(market, key)
     else if (BINARY_MARKETS.has(key))    normalized = normalizeBinary(market, key)
     else if (MILESTONE_MARKETS.has(key)) normalized = normalizeMilestone(market, key)
     if (normalized) markets.push(normalized)

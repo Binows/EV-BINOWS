@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { calcQualityScore } from '../functions/evMath'
 
 // ---------------------------------------------------------------------------
@@ -15,17 +15,14 @@ function Stars({ score }) {
 }
 
 // ---------------------------------------------------------------------------
-// LineCard — idêntico ao Manual, adaptado para estrutura do Live
+// LineCard — idêntico ao Manual
 // ---------------------------------------------------------------------------
 
 function LineCard({ line }) {
-  // EV+ quando ev > 3, EV- quando ev < -3, neutro no meio
   const isPositive = line.ev > 3
   const isNegative = line.ev < -3
   const statusClass = isPositive ? 'pos' : isNegative ? 'neg' : 'neu'
   const signalLabel = isPositive ? 'EV+' : isNegative ? 'EV-' : 'neutro'
-
-  // prob no Live vem como percentual (ex: 54.7)
   const probDisplay = line.prob > 1 ? line.prob : line.prob * 100
   const quality = line.qualityScore ?? calcQualityScore(line.ev, line.odd, line.hrStr || '')
 
@@ -72,28 +69,51 @@ function LineCard({ line }) {
 }
 
 // ---------------------------------------------------------------------------
-// PlayerCard
+// Agrupa apostas por jogador+jogo
 // ---------------------------------------------------------------------------
 
-function PlayerCard({ bet }) {
-  const hasEV = bet.ev > 3
+function groupByPlayer(bets) {
+  const map = new Map()
+  for (const bet of bets) {
+    const key = `${bet.player}||${bet.game}`
+    if (!map.has(key)) {
+      map.set(key, {
+        player: bet.player,
+        game:   bet.game,
+        lines:  [],
+        hasEV:  false,
+      })
+    }
+    const group = map.get(key)
+    group.lines.push(bet)
+    if (bet.ev > 3) group.hasEV = true
+  }
+  return Array.from(map.values())
+}
 
+// ---------------------------------------------------------------------------
+// PlayerCard agrupado
+// ---------------------------------------------------------------------------
+
+function PlayerCard({ group }) {
   return (
-    <article className={`player-card ${hasEV ? 'has-ev' : ''}`}>
+    <article className={`player-card ${group.hasEV ? 'has-ev' : ''}`}>
       <div className="player-header">
         <div className="player-name">
-          {bet.player}
-          {bet.game ? <span className="game-name">{bet.game}</span> : null}
+          {group.player}
+          {group.game ? <span className="game-name">{group.game}</span> : null}
         </div>
         <div className="player-meta">
-          <span className="market-badge">{bet.market}</span>
-          {bet.n >= 2 && (
-            <span className="last5">{bet.n} casas</span>
-          )}
+          <span className="market-badge">{group.lines.length} prop{group.lines.length > 1 ? 's' : ''}</span>
         </div>
       </div>
       <div className="lines">
-        <LineCard line={bet} />
+        {group.lines.map((line) => (
+          <LineCard
+            key={`${line.player}-${line.lineLabel}-${line.book}`}
+            line={line}
+          />
+        ))}
       </div>
     </article>
   )
@@ -133,10 +153,8 @@ function sortItems(items, sortBy) {
 
 function TopEvLive({ bets }) {
   const [sortBy, setSortBy] = useState('ev')
-
   const topItems = bets.filter((b) => b.ev > 3 && b.odd >= 2)
   if (!topItems.length) return null
-
   const sorted = sortItems(topItems, sortBy)
 
   return (
@@ -170,9 +188,7 @@ function TopEvLive({ bets }) {
               <span className="top-ev-odd">@ {item.odd.toFixed(2)}</span>
               <span className="top-ev-ev">+{item.ev.toFixed(1)}%</span>
               <Stars score={quality} />
-              {item.hrStr && (
-                <span className="top-ev-hr">{item.hrStr}</span>
-              )}
+              {item.hrStr && <span className="top-ev-hr">{item.hrStr}</span>}
               <span className="top-ev-banca">
                 {item.kelly > 0 ? `${item.kelly.toFixed(2)}% banca` : ''}
               </span>
@@ -202,15 +218,17 @@ export default function LiveBetsPanel({ bets, loadingText }) {
     return <div className="empty">Nenhuma aposta encontrada.</div>
   }
 
+  const grouped = useMemo(() => groupByPlayer(bets), [bets])
+
   return (
     <>
       <TopEvLive bets={bets} />
       <div className="section-title" style={{ marginTop: '1.5rem' }}>todas as props</div>
       <section>
-        {bets.map((bet) => (
+        {grouped.map((group) => (
           <PlayerCard
-            key={`${bet.player}-${bet.lineLabel}-${bet.book}`}
-            bet={bet}
+            key={`${group.player}||${group.game}`}
+            group={group}
           />
         ))}
       </section>

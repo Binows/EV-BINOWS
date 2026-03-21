@@ -1,73 +1,104 @@
 /**
  * nbaStatsService.js
- *
- * Handles all HTTP communication with the NBA stats proxy worker.
- * Results are cached in memory to avoid redundant network requests:
- *   - Player ID list is fetched once per page load
- *   - Game logs are cached per player name for 1 hour
- *
- * Exports:
- *   - fetchPlayerGameLogs(playerName) → game log rows for a single player
  */
 
 const WORKER = 'https://round-rain-9e80.vinipaio.workers.dev'
 const SEASON = '2025-26'
 const CACHE_TTL_MS = 60 * 60 * 1000 // 1 hour
+const FETCH_TIMEOUT = 5000 // 5 segundos — evita travar quando NBA Stats estiver fora
 
-/**
- * Alias table: maps common name variations to the canonical NBA.com display name.
- * Used for fuzzy matching when the exact name doesn't appear in the API roster.
- */
 const PLAYER_ALIASES = {
-  'pj washington': 'p.j. washington',
-  'p.j. washington': 'p.j. washington',
-  'ron holland ii': 'ronald holland ii',
-  'ron holland': 'ronald holland ii',
-  'og anunoby': 'o.g. anunoby',
-  'bones hyland': 'bones hyland',
-  'nic claxton': 'nicolas claxton',
-  'nicolas claxton': 'nicolas claxton',
-  'gary trent jr': 'gary trent jr.',
-  'gary trent jr.': 'gary trent jr.',
-  'wendell carter jr': 'wendell carter jr.',
-  'jabari smith jr': 'jabari smith jr.',
-  'jabari smith jr.': 'jabari smith jr.',
-  'kenyon martin jr': 'kenyon martin jr.',
-  'larry nance jr': 'larry nance jr.',
-  'kelly oubre jr': 'kelly oubre jr.',
-  'aj griffin': 'a.j. griffin',
-  'rj barrett': 'r.j. barrett',
-  'tj mcconnell': 't.j. mcconnell',
-  'cj mccollum': 'c.j. mccollum',
+  // Iniciais
+  'pj washington':      'p.j. washington',
+  'p.j. washington':    'p.j. washington',
+  'og anunoby':         'o.g. anunoby',
+  'aj griffin':         'a.j. griffin',
+  'rj barrett':         'r.j. barrett',
+  'tj mcconnell':       't.j. mcconnell',
+  'cj mccollum':        'c.j. mccollum',
+
+  // Sufixos Jr/II/III
+  'ron holland':        'ronald holland ii',
+  'ron holland ii':     'ronald holland ii',
+  'jabari smith jr':    'jabari smith jr.',
+  'jabari smith jr.':   'jabari smith jr.',
+  'gary trent jr':      'gary trent jr.',
+  'gary trent jr.':     'gary trent jr.',
+  'wendell carter jr':  'wendell carter jr.',
+  'kenyon martin jr':   'kenyon martin jr.',
+  'larry nance jr':     'larry nance jr.',
+  'kelly oubre jr':     'kelly oubre jr.',
+  'jaime jaquez jr':    'jaime jaquez jr.',
+  'jaime jaquez jr.':   'jaime jaquez jr.',
+  'kevin porter jr':    'kevin porter jr.',
+  'kevin porter jr.':   'kevin porter jr.',
+  'derrick jones jr':   'derrick jones jr.',
+  'derrick jones jr.':  'derrick jones jr.',
+
+  // Nomes com caracteres especiais
+  'luka doncic':        'luka dončić',
+  'luka dončić':        'luka dončić',
+  'dennis schroder':    'dennis schröder',
+  'dennis schröder':    'dennis schröder',
+  'bojan bogdanovic':   'bojan bogdanović',
+  'nikola jokic':       'nikola jokić',
+  'nikola vucevic':     'nikola vučević',
+  'kristaps porzingis': 'kristaps porziņģis',
+  'dario saric':        'dario šarić',
+  'moussa diabate':     'moussa diabaté',
+  'moussa diabaté':     'moussa diabaté',
+  'tidjane salaun':     'tidjane salaün',
+  'tidjane salaün':     'tidjane salaün',
+
+  // Nomes alternativos / apelidos
+  'nic claxton':        'nicolas claxton',
+  'nicolas claxton':    'nicolas claxton',
+  'bones hyland':       'bones hyland',
+  'de\'aaron fox':      'de\'aaron fox',
+  'deaaron fox':        'de\'aaron fox',
+
+  // Rookies com nomes diferentes na NBA Stats API
+  'alexandre sarr':     'alex sarr',
+  'alex sarr':          'alex sarr',
+  'carlton carrington': 'bub carrington',
+  'bub carrington':     'bub carrington',
+  'kasparas jakucionis': 'kasparas jakučionis',
+  'kasparas jakučionis': 'kasparas jakučionis',
+  'matas buzelis':      'matas buzelis',
+  'oso ighodaro':       'oso ighodaro',
+  'dylan harper':       'dylan harper',
+  'kon knueppel':       'kon knueppel',
+  'stephon castle':     'stephon castle',
+  'zaccharie risacher': 'zaccharie risacher',
+  'donovan clingan':    'donovan clingan',
+  'derik queen':        'derik queen',
+  'will riley':         'will riley',
+  'maxime raynaud':     'maxime raynaud',
+  'yves missi':         'yves missi',
+  'collin gillespie':   'collin gillespie',
 }
 
-// --- In-memory caches (module-level singletons) ---
-
-/** @type {object|null} Full NBA player list, fetched once */
 let allPlayersCache = null
-
-/** @type {Record<string, number>} playerName → PERSON_ID */
 const playerIdCache = {}
-
-/**
- * @type {Record<string, { logs: Array, ts: number }>}
- * playerName → { logs, timestamp }
- */
 const gameLogCache = {}
 
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
+// Helper para fetch com timeout
+async function fetchWithTimeout(url, options = {}) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT)
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal })
+    clearTimeout(timeout)
+    return res
+  } catch (err) {
+    clearTimeout(timeout)
+    throw err
+  }
+}
 
-/**
- * Fetches the full NBA player list from the proxy and caches it.
- * Subsequent calls return the cached value immediately.
- *
- * @returns {Promise<object>} Raw NBA commonallplayers response
- */
 async function fetchAllPlayers() {
   if (allPlayersCache) return allPlayersCache
-  const res = await fetch(
+  const res = await fetchWithTimeout(
     `${WORKER}/nba/commonallplayers?LeagueID=00&Season=${SEASON}&IsOnlyCurrentSeason=0`,
   )
   if (!res.ok) throw new Error(`NBA players list error: ${res.status}`)
@@ -75,14 +106,6 @@ async function fetchAllPlayers() {
   return allPlayersCache
 }
 
-/**
- * Resolves a player display name to their NBA PERSON_ID.
- * First checks the alias table, then does exact match, then word-by-word fuzzy
- * match against the full roster.
- *
- * @param {string} name - Player display name as seen in the JSON exports (e.g. "LeBron James")
- * @returns {Promise<number|null>} PERSON_ID, or null if no match found
- */
 async function fetchNBAPlayerID(name) {
   const normalizedInput = name.toLowerCase().trim()
   const lookupName = PLAYER_ALIASES[normalizedInput] || normalizedInput
@@ -99,13 +122,24 @@ async function fetchNBAPlayerID(name) {
     // 1. Exact match
     let match = rows.find((row) => row[nameIdx].toLowerCase() === lookupName)
 
-    // 2. Word-by-word partial match (handles initials like "P.J." vs "PJ")
+    // 2. Word-by-word partial match
     if (!match) {
-      const parts = lookupName.split(' ')
+      const parts = lookupName.split(' ').filter(p => p.length > 1)
       match = rows.find((row) => {
         const rowName = row[nameIdx].toLowerCase()
         return parts.every((part) => rowName.includes(part))
       })
+    }
+
+    // 3. Last name only match (fallback para nomes com caracteres especiais)
+    if (!match) {
+      const lastName = lookupName.split(' ').pop()
+      if (lastName && lastName.length > 3) {
+        const candidates = rows.filter((row) =>
+          row[nameIdx].toLowerCase().includes(lastName)
+        )
+        if (candidates.length === 1) match = candidates[0]
+      }
     }
 
     if (!match) {
@@ -122,20 +156,6 @@ async function fetchNBAPlayerID(name) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Fetches the current season game log for a player, normalised to the shape:
- * `{ pts, reb, ast, fg3 }` per game.
- *
- * Results are cached for CACHE_TTL_MS (1 hour). Returns null on any error
- * so callers can gracefully skip enrichment.
- *
- * @param {string} playerName - Human-readable player name
- * @returns {Promise<Array<{pts:number, reb:number, ast:number, fg3:number}>|null>}
- */
 export async function fetchPlayerGameLogs(playerName) {
   const cached = gameLogCache[playerName]
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) return cached.logs
@@ -144,7 +164,7 @@ export async function fetchPlayerGameLogs(playerName) {
     const playerId = await fetchNBAPlayerID(playerName)
     if (!playerId) return null
 
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `${WORKER}/nba/playergamelog?PlayerID=${playerId}&Season=${SEASON}` +
         `&SeasonType=Regular%20Season&PerMode=PerGame`,
     )
@@ -158,8 +178,7 @@ export async function fetchPlayerGameLogs(playerName) {
       pts: headers.indexOf('PTS'),
       reb: headers.indexOf('REB'),
       ast: headers.indexOf('AST'),
-      fg3:
-        headers.indexOf('FG3M') !== -1 ? headers.indexOf('FG3M') : headers.indexOf('FG3_M'),
+      fg3: headers.indexOf('FG3M') !== -1 ? headers.indexOf('FG3M') : headers.indexOf('FG3_M'),
     }
 
     const logs = rows.map((row) => ({

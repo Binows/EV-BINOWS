@@ -2,6 +2,7 @@
  * liveApi.js
  *
  * Pipeline Live: odds-api.io (bet365) + NBA Stats para EV real por temporada.
+ * A bet365 é processada diretamente — não depende de match com The Odds API.
  */
 import {
   calcEV,
@@ -62,21 +63,16 @@ const MARKET_TYPE = {
   player_threes_milestones:        '3pt',
 }
 
-// Mapeia type interno → chave que calcSeasonHitRate espera
 const TYPE_TO_SEASON_MARKET = {
-  pts:  'pontos',
-  reb:  'rebotes',
-  ast:  'assistencias',
+  pts:   'pontos',
+  reb:   'rebotes',
+  ast:   'assistencias',
   '3pt': '3pts',
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function normalizeTeam(s) {
-  return s.toLowerCase().replace(/[^a-z]/g, '')
-}
 
 function aggregateBookmakers(bookmakers, playerMap, gameLabel) {
   for (const book of bookmakers) {
@@ -129,7 +125,6 @@ async function enrichWithSeasonStats(bets) {
     const logs = logsMap[bet.player]
     const seasonMarket = TYPE_TO_SEASON_MARKET[bet.type]
 
-    // Só enriquece mercados com dados de temporada disponíveis
     if (!logs || !seasonMarket) return bet
 
     const hr = calcSeasonHitRate(logs, seasonMarket, bet.line)
@@ -138,7 +133,6 @@ async function enrichWithSeasonStats(bets) {
     const hrStr = `${hr.hits}/${hr.games} (${hr.pct}%)`
     const qualityScore = calcQualityScore(bet.ev, bet.odd, hrStr)
 
-    // Com >= 10 jogos: usa prob da temporada como referência principal
     if (hr.games >= 10) {
       const seasonProb  = hr.pct / 100
       const seasonEV    = calcEV(seasonProb, bet.odd)
@@ -158,7 +152,6 @@ async function enrichWithSeasonStats(bets) {
       }
     }
 
-    // Com 5-9 jogos: mantém EV original, refina Kelly
     const refinedKelly = calcKellyFromSeason(bet.prob / 100, bet.odd, hr)
     return {
       ...bet,
@@ -175,57 +168,60 @@ async function enrichWithSeasonStats(bets) {
 // ---------------------------------------------------------------------------
 
 export async function fetchLiveBets(onProgress) {
-  const [games, bet365Events] = await Promise.all([
-    fetchNBAEvents(),
+  // Busca bet365 e The Odds API em paralelo
+  const [bet365Events, games] = await Promise.all([
     fetchBet365Props().catch(() => []),
+    fetchNBAEvents().catch(() => []),
   ])
 
-  if (games.length === 0) return { bets: [], remainingRequests: '' }
+  // Se não tem eventos da bet365, retorna vazio
+  if (bet365Events.length === 0) return { bets: [], remainingRequests: '' }
 
   const bets = []
   let remainingRequests = ''
 
-  for (const event of games) {
-    if (onProgress) onProgress(`${event.away_team} @ ${event.home_team}...`)
+  // Processa CADA evento da bet365 diretamente — sem depender de match
+  for (const b365Event of bet365Events) {
+    const gameLabel = `${b365Event.awayTeam} @ ${b365Event.homeTeam}`
 
-    const gameLabel = `${event.away_team} @ ${event.home_team}`
+    if (onProgress) onProgress(`${gameLabel}...`)
+
     const playerMap = {}
 
-    // 1. The Odds API (Pinnacle / DraftKings / FanDuel) — quando disponível
-    try {
-      const oddsResult = await fetchEventOdds(event.id)
-      if (oddsResult.remainingRequests) remainingRequests = oddsResult.remainingRequests
-      if (oddsResult.bookmakers.length) {
-        aggregateBookmakers(oddsResult.bookmakers, playerMap, gameLabel)
-      }
-    } catch {
-      // segue sem The Odds API
+    // 1. bet365 — sempre disponível
+    if (b365Event.bookmakers?.length) {
+      aggregateBookmakers(b365Event.bookmakers, playerMap, gameLabel)
     }
 
-    // 2. bet365 via odds-api.io
-    const homeNorm = normalizeTeam(event.home_team)
-    const awayNorm = normalizeTeam(event.away_team)
-    const homeWord = normalizeTeam(event.home_team.split(' ').pop())
-    const awayWord = normalizeTeam(event.away_team.split(' ').pop())
+    // 2. The Odds API — tenta fazer match para de-juicing (opcional)
+    // Busca o evento correspondente na The Odds API pelo nome dos times
+    const oddsEvent = games.find((g) => {
+      const gHome = g.home_team.toLowerCase()
+      const gAway = g.away_team.toLowerCase()
+      const bHome = b365Event.homeTeam.toLowerCase()
+      const bAway = b365Event.awayTeam.toLowerCase()
 
-    const b365Event = bet365Events.find((ev) => {
-      const h     = normalizeTeam(ev.homeTeam)
-      const a     = normalizeTeam(ev.awayTeam)
-      const hWord = normalizeTeam(ev.homeTeam.split(' ').pop())
-      const aWord = normalizeTeam(ev.awayTeam.split(' ').pop())
+      const homeWord = gHome.split(' ').pop()
+      const awayWord = gAway.split(' ').pop()
+      const bHomeWord = bHome.split(' ').pop()
+      const bAwayWord = bAway.split(' ').pop()
 
-      const homeMatch =
-        homeNorm.includes(h) || h.includes(homeNorm) ||
-        homeNorm.includes(hWord) || hWord.includes(homeWord)
-      const awayMatch =
-        awayNorm.includes(a) || a.includes(awayNorm) ||
-        awayNorm.includes(aWord) || aWord.includes(awayWord)
-
-      return homeMatch && awayMatch
+      return (
+        (gHome.includes(bHomeWord) || bHome.includes(homeWord)) &&
+        (gAway.includes(bAwayWord) || bAway.includes(awayWord))
+      )
     })
 
-    if (b365Event?.bookmakers?.length) {
-      aggregateBookmakers(b365Event.bookmakers, playerMap, gameLabel)
+    if (oddsEvent) {
+      try {
+        const oddsResult = await fetchEventOdds(oddsEvent.id)
+        if (oddsResult.remainingRequests) remainingRequests = oddsResult.remainingRequests
+        if (oddsResult.bookmakers.length) {
+          aggregateBookmakers(oddsResult.bookmakers, playerMap, gameLabel)
+        }
+      } catch {
+        // segue sem The Odds API para este jogo
+      }
     }
 
     // 3. Monta apostas brutas
